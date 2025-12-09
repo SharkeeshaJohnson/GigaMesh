@@ -1,26 +1,638 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Pixel Life Sim Color System - Muted, Earthy, Nostalgic */
+  --pixel-bg-dark: #1a1c2c;
+  --pixel-bg-mid: #2d2f3d;
+  --pixel-bg-light: #3d3f4f;
+
+  --pixel-surface: #4a4d5e;
+  --pixel-surface-light: #5a5d6e;
+  --pixel-surface-hover: #6a6d7e;
+
+  --pixel-parchment: #d4c8a8;
+  --pixel-parchment-light: #e8dfc8;
+  --pixel-parchment-dark: #b5a888;
+
+  --pixel-text: #e8e4d8;
+  --pixel-text-dim: #a8a498;
+  --pixel-text-dark: #2d2a26;
+
+  /* Accent colors - muted and retro */
+  --pixel-green: #6b8e4e;
+  --pixel-green-light: #8fb86b;
+  --pixel-green-dark: #4a6b35;
+
+  --pixel-red: #8e4e4e;
+  --pixel-red-light: #b86b6b;
+  --pixel-red-dark: #6b3535;
+
+  --pixel-gold: #c4a84b;
+  --pixel-gold-light: #e8d06b;
+  --pixel-gold-dark: #9a8535;
+
+  --pixel-blue: #4e6b8e;
+  --pixel-blue-light: #6b8eb8;
+  --pixel-blue-dark: #354a6b;
+
+  --pixel-purple: #6b4e8e;
+  --pixel-purple-light: #8e6bb8;
+  --pixel-purple-dark: #4a356b;
+
+  --pixel-border: #5a5d6e;
+  --pixel-border-light: #7a7d8e;
+  --pixel-shadow: rgba(0, 0, 0, 0.5);
+
+  --background: var(--pixel-bg-dark);
+  --foreground: var(--pixel-text);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+
+  /* Pixel Colors */
+  --color-pixel-bg-dark: var(--pixel-bg-dark);
+  --color-pixel-bg-mid: var(--pixel-bg-mid);
+  --color-pixel-bg-light: var(--pixel-bg-light);
+  --color-pixel-surface: var(--pixel-surface);
+  --color-pixel-surface-light: var(--pixel-surface-light);
+  --color-pixel-parchment: var(--pixel-parchment);
+  --color-pixel-parchment-light: var(--pixel-parchment-light);
+  --color-pixel-text: var(--pixel-text);
+  --color-pixel-text-dim: var(--pixel-text-dim);
+  --color-pixel-green: var(--pixel-green);
+  --color-pixel-green-light: var(--pixel-green-light);
+  --color-pixel-red: var(--pixel-red);
+  --color-pixel-red-light: var(--pixel-red-light);
+  --color-pixel-gold: var(--pixel-gold);
+  --color-pixel-blue: var(--pixel-blue);
+  --color-pixel-purple: var(--pixel-purple);
+  --color-pixel-border: var(--pixel-border);
+
+  /* Fonts */
+  --font-pixel: 'Press Start 2P', monospace;
+  --font-pixel-body: 'VT323', monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* Base styles */
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'VT323', monospace;
+  font-size: 18px;
+  line-height: 1.4;
+}
+
+/* Scanline overlay effect */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Pixel-perfect rendering */
+.pixel-art, .pixel-render {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* ===== PIXEL FRAME SYSTEM ===== */
+/* These create that chunky retro game UI feel */
+
+.pixel-frame {
+  background: var(--pixel-surface);
+  border: 4px solid var(--pixel-border-light);
+  box-shadow:
+    inset -4px -4px 0 var(--pixel-bg-light),
+    inset 4px 4px 0 var(--pixel-surface-light),
+    8px 8px 0 var(--pixel-shadow);
+  padding: 16px;
+  position: relative;
+}
+
+.pixel-frame-inset {
+  background: var(--pixel-bg-dark);
+  border: 4px solid var(--pixel-bg-light);
+  box-shadow:
+    inset 4px 4px 0 rgba(0, 0, 0, 0.3),
+    inset -4px -4px 0 var(--pixel-surface);
+  padding: 12px;
+}
+
+.pixel-frame-gold {
+  background: var(--pixel-surface);
+  border: 4px solid var(--pixel-gold);
+  box-shadow:
+    inset -4px -4px 0 var(--pixel-bg-light),
+    inset 4px 4px 0 var(--pixel-gold-light),
+    8px 8px 0 var(--pixel-shadow);
+  padding: 16px;
+}
+
+/* Pixel card - like inventory slot */
+.pixel-card {
+  background: var(--pixel-bg-mid);
+  border: 3px solid var(--pixel-border);
+  box-shadow:
+    inset -3px -3px 0 var(--pixel-bg-dark),
+    inset 3px 3px 0 var(--pixel-surface);
+  padding: 12px;
+  transition: all 0.1s ease;
+}
+
+.pixel-card:hover {
+  background: var(--pixel-bg-light);
+  border-color: var(--pixel-border-light);
+  transform: translate(-2px, -2px);
+  box-shadow:
+    inset -3px -3px 0 var(--pixel-bg-dark),
+    inset 3px 3px 0 var(--pixel-surface-light),
+    6px 6px 0 var(--pixel-shadow);
+}
+
+.pixel-card-selected {
+  border-color: var(--pixel-gold);
+  box-shadow:
+    inset -3px -3px 0 var(--pixel-bg-dark),
+    inset 3px 3px 0 var(--pixel-gold-light),
+    0 0 0 2px var(--pixel-gold),
+    6px 6px 0 var(--pixel-shadow);
+}
+
+/* ===== BUTTONS ===== */
+
+.pixel-btn {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 12px;
+  background: var(--pixel-surface);
+  color: var(--pixel-text);
+  border: 4px solid var(--pixel-border-light);
+  box-shadow:
+    inset -4px -4px 0 var(--pixel-bg-light),
+    inset 4px 4px 0 var(--pixel-surface-light),
+    4px 4px 0 var(--pixel-shadow);
+  padding: 12px 24px;
+  cursor: pointer;
+  transition: all 0.05s ease;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.pixel-btn:hover {
+  background: var(--pixel-surface-light);
+  transform: translate(0, -2px);
+  box-shadow:
+    inset -4px -4px 0 var(--pixel-bg-light),
+    inset 4px 4px 0 var(--pixel-surface-hover),
+    6px 6px 0 var(--pixel-shadow);
+}
+
+.pixel-btn:active {
+  transform: translate(4px, 4px);
+  box-shadow:
+    inset 4px 4px 0 var(--pixel-bg-light),
+    inset -4px -4px 0 var(--pixel-surface-light);
+}
+
+.pixel-btn-primary {
+  background: var(--pixel-green);
+  border-color: var(--pixel-green-light);
+  box-shadow:
+    inset -4px -4px 0 var(--pixel-green-dark),
+    inset 4px 4px 0 var(--pixel-green-light),
+    4px 4px 0 var(--pixel-shadow);
+}
+
+.pixel-btn-primary:hover {
+  background: var(--pixel-green-light);
+  box-shadow:
+    inset -4px -4px 0 var(--pixel-green-dark),
+    inset 4px 4px 0 #a8d888,
+    6px 6px 0 var(--pixel-shadow);
+}
+
+.pixel-btn-danger {
+  background: var(--pixel-red);
+  border-color: var(--pixel-red-light);
+  box-shadow:
+    inset -4px -4px 0 var(--pixel-red-dark),
+    inset 4px 4px 0 var(--pixel-red-light),
+    4px 4px 0 var(--pixel-shadow);
+}
+
+.pixel-btn-small {
+  font-size: 10px;
+  padding: 8px 16px;
+  border-width: 3px;
+  box-shadow:
+    inset -3px -3px 0 var(--pixel-bg-light),
+    inset 3px 3px 0 var(--pixel-surface-light),
+    3px 3px 0 var(--pixel-shadow);
+}
+
+/* ===== INPUT FIELDS ===== */
+
+.pixel-input {
+  font-family: 'VT323', monospace;
+  font-size: 20px;
+  background: var(--pixel-bg-dark);
+  color: var(--pixel-text);
+  border: 3px solid var(--pixel-border);
+  box-shadow:
+    inset 3px 3px 0 rgba(0, 0, 0, 0.3),
+    inset -3px -3px 0 var(--pixel-surface);
+  padding: 10px 14px;
+  outline: none;
+}
+
+.pixel-input:focus {
+  border-color: var(--pixel-gold);
+  box-shadow:
+    inset 3px 3px 0 rgba(0, 0, 0, 0.3),
+    inset -3px -3px 0 var(--pixel-surface),
+    0 0 0 2px var(--pixel-gold-dark);
+}
+
+.pixel-input::placeholder {
+  color: var(--pixel-text-dim);
+}
+
+.pixel-select {
+  font-family: 'VT323', monospace;
+  font-size: 20px;
+  background: var(--pixel-bg-dark);
+  color: var(--pixel-text);
+  border: 3px solid var(--pixel-border);
+  box-shadow:
+    inset 3px 3px 0 rgba(0, 0, 0, 0.3);
+  padding: 10px 14px;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23a8a498' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+}
+
+/* ===== STAT BARS (RPG-style meters) ===== */
+
+.pixel-meter {
+  height: 20px;
+  background: var(--pixel-bg-dark);
+  border: 3px solid var(--pixel-border);
+  box-shadow:
+    inset 3px 3px 0 rgba(0, 0, 0, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.pixel-meter-fill {
+  height: 100%;
+  transition: width 0.3s ease;
+  position: relative;
+}
+
+.pixel-meter-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(180deg, rgba(255,255,255,0.2) 0%, transparent 100%);
+}
+
+.pixel-meter-green .pixel-meter-fill {
+  background: linear-gradient(180deg, var(--pixel-green-light) 0%, var(--pixel-green) 50%, var(--pixel-green-dark) 100%);
+}
+
+.pixel-meter-red .pixel-meter-fill {
+  background: linear-gradient(180deg, var(--pixel-red-light) 0%, var(--pixel-red) 50%, var(--pixel-red-dark) 100%);
+}
+
+.pixel-meter-gold .pixel-meter-fill {
+  background: linear-gradient(180deg, var(--pixel-gold-light) 0%, var(--pixel-gold) 50%, var(--pixel-gold-dark) 100%);
+}
+
+.pixel-meter-blue .pixel-meter-fill {
+  background: linear-gradient(180deg, var(--pixel-blue-light) 0%, var(--pixel-blue) 50%, var(--pixel-blue-dark) 100%);
+}
+
+.pixel-meter-purple .pixel-meter-fill {
+  background: linear-gradient(180deg, var(--pixel-purple-light) 0%, var(--pixel-purple) 50%, var(--pixel-purple-dark) 100%);
+}
+
+/* ===== TYPOGRAPHY ===== */
+
+.pixel-title {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 24px;
+  color: var(--pixel-parchment);
+  text-shadow:
+    4px 4px 0 var(--pixel-bg-dark),
+    -1px -1px 0 var(--pixel-parchment-dark);
+  letter-spacing: 2px;
+}
+
+.pixel-title-large {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 32px;
+  color: var(--pixel-parchment);
+  text-shadow:
+    6px 6px 0 var(--pixel-bg-dark),
+    -2px -2px 0 var(--pixel-parchment-dark);
+  letter-spacing: 3px;
+  line-height: 1.5;
+}
+
+.pixel-subtitle {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 12px;
+  color: var(--pixel-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.pixel-text {
+  font-family: 'VT323', monospace;
+  font-size: 22px;
+  color: var(--pixel-text);
+  line-height: 1.4;
+}
+
+.pixel-text-small {
+  font-family: 'VT323', monospace;
+  font-size: 18px;
+  color: var(--pixel-text-dim);
+}
+
+.pixel-label {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  color: var(--pixel-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* ===== AVATAR/PORTRAIT FRAME ===== */
+
+.pixel-avatar {
+  width: 48px;
+  height: 48px;
+  background: var(--pixel-surface);
+  border: 3px solid var(--pixel-border);
+  box-shadow:
+    inset -3px -3px 0 var(--pixel-bg-dark),
+    inset 3px 3px 0 var(--pixel-surface-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.pixel-avatar-large {
+  width: 64px;
+  height: 64px;
+  border-width: 4px;
+}
+
+.pixel-avatar-dead {
+  background: var(--pixel-bg-dark);
+  border-color: var(--pixel-red-dark);
+}
+
+.pixel-avatar-dead::after {
+  content: 'X';
+  font-family: 'Press Start 2P', monospace;
+  font-size: 24px;
+  color: var(--pixel-red);
+  position: absolute;
+}
+
+/* ===== DIALOG/MODAL ===== */
+
+.pixel-dialog {
+  background: var(--pixel-surface);
+  border: 6px solid var(--pixel-border-light);
+  box-shadow:
+    inset -6px -6px 0 var(--pixel-bg-light),
+    inset 6px 6px 0 var(--pixel-surface-light),
+    12px 12px 0 var(--pixel-shadow);
+  padding: 24px;
+}
+
+/* ===== SCROLLBAR ===== */
+
+::-webkit-scrollbar {
+  width: 16px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--pixel-bg-dark);
+  border: 3px solid var(--pixel-border);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--pixel-surface);
+  border: 3px solid var(--pixel-border-light);
+  box-shadow:
+    inset -3px -3px 0 var(--pixel-bg-light),
+    inset 3px 3px 0 var(--pixel-surface-light);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--pixel-surface-light);
+}
+
+/* ===== ANIMATIONS ===== */
+
+@keyframes pixel-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@keyframes pixel-pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow:
+      inset -3px -3px 0 var(--pixel-bg-dark),
+      inset 3px 3px 0 var(--pixel-gold-light),
+      0 0 0 0 var(--pixel-gold);
+  }
+  50% {
+    transform: scale(1.02);
+    box-shadow:
+      inset -3px -3px 0 var(--pixel-bg-dark),
+      inset 3px 3px 0 var(--pixel-gold-light),
+      0 0 20px 4px var(--pixel-gold);
+  }
+}
+
+@keyframes pixel-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes pixel-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+.animate-pixel-blink {
+  animation: pixel-blink 1s step-end infinite;
+}
+
+.animate-pixel-pulse {
+  animation: pixel-pulse 2s ease-in-out infinite;
+}
+
+.animate-pixel-bounce {
+  animation: pixel-bounce 0.5s ease-in-out infinite;
+}
+
+/* ===== DITHER PATTERNS ===== */
+
+.pixel-dither-dark {
+  background-image: url("data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='0' y='0' width='2' height='2' fill='%231a1c2c'/%3E%3Crect x='2' y='2' width='2' height='2' fill='%231a1c2c'/%3E%3C/svg%3E");
+  background-size: 4px 4px;
+}
+
+.pixel-dither-light {
+  background-image: url("data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='0' y='0' width='2' height='2' fill='rgba(255,255,255,0.05)'/%3E%3Crect x='2' y='2' width='2' height='2' fill='rgba(255,255,255,0.05)'/%3E%3C/svg%3E");
+  background-size: 4px 4px;
+}
+
+/* ===== SEVERITY BADGES ===== */
+
+.pixel-badge {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 8px;
+  padding: 4px 8px;
+  border: 2px solid;
+  text-transform: uppercase;
+}
+
+.pixel-badge-minor {
+  background: var(--pixel-surface);
+  border-color: var(--pixel-border);
+  color: var(--pixel-text-dim);
+}
+
+.pixel-badge-moderate {
+  background: var(--pixel-blue-dark);
+  border-color: var(--pixel-blue);
+  color: var(--pixel-blue-light);
+}
+
+.pixel-badge-major {
+  background: var(--pixel-purple-dark);
+  border-color: var(--pixel-purple);
+  color: var(--pixel-purple-light);
+}
+
+.pixel-badge-life-changing {
+  background: var(--pixel-red-dark);
+  border-color: var(--pixel-red);
+  color: var(--pixel-red-light);
+}
+
+/* ===== CHAT BUBBLES ===== */
+
+.pixel-chat-user {
+  background: var(--pixel-blue);
+  border: 3px solid var(--pixel-blue-light);
+  box-shadow:
+    inset -3px -3px 0 var(--pixel-blue-dark),
+    inset 3px 3px 0 var(--pixel-blue-light);
+  padding: 12px;
+  color: var(--pixel-text);
+}
+
+.pixel-chat-npc {
+  background: var(--pixel-surface);
+  border: 3px solid var(--pixel-border-light);
+  box-shadow:
+    inset -3px -3px 0 var(--pixel-bg-light),
+    inset 3px 3px 0 var(--pixel-surface-light);
+  padding: 12px;
+  color: var(--pixel-text);
+}
+
+/* ===== LOADING STATES ===== */
+
+.pixel-loading {
+  display: inline-block;
+}
+
+.pixel-loading::after {
+  content: '...';
+  animation: pixel-dots 1.5s steps(4) infinite;
+}
+
+@keyframes pixel-dots {
+  0% { content: ''; }
+  25% { content: '.'; }
+  50% { content: '..'; }
+  75% { content: '...'; }
+}
+
+/* ===== SCANLINE OVERLAY CLASS ===== */
+.pixel-scanline {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ===== PIXEL TAG ===== */
+.pixel-tag {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 8px;
+  background: var(--pixel-bg-dark);
+  color: var(--pixel-text-dim);
+  border: 2px solid var(--pixel-border);
+  padding: 4px 8px;
+  text-transform: uppercase;
+}
+
+/* ===== DEAD AVATAR STATE ===== */
+.pixel-avatar.dead {
+  background: var(--pixel-bg-dark);
+  border-color: var(--pixel-red-dark);
+  position: relative;
+}
+
+.pixel-avatar.dead::after {
+  content: 'X';
+  font-family: 'Press Start 2P', monospace;
+  font-size: 20px;
+  color: var(--pixel-red);
+  position: absolute;
 }
