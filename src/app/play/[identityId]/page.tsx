@@ -6,7 +6,7 @@ import { useEffect, useState, useRef } from 'react';
 import { Identity, NPC, Action, Message, Conversation, SimulationResult } from '@/lib/types';
 import { getFromIndexedDB, saveToIndexedDB, getQueuedActions, getConversationsForNPC, getSimulationsForIdentity } from '@/lib/indexeddb';
 import { useChat, useMemory, useModels } from '@/lib/reverbia';
-import { MODEL_CONFIG, getModelForNPCTier } from '@/lib/models';
+import { MODEL_CONFIG, getModelForNPCTier, getModelForNPC, filterAvailableModels, assignModelsToNPCs } from '@/lib/models';
 import { parseImageTags, inferImageType, generateCharacterConsistentImage } from '@/lib/image-generation';
 import { cacheChatImage, getCachedChatImage } from '@/lib/sprite-cache';
 import {
@@ -266,6 +266,8 @@ export default function GamePage() {
             console.log(`[Migration] Generated ${newSeeds.length} story seeds for narrative engine`);
           }
 
+          // Note: Model assignment is handled by a separate useEffect that waits for models to load
+
           await saveToIndexedDB('identities', loadedIdentity);
           setIdentity(loadedIdentity);
 
@@ -324,6 +326,39 @@ export default function GamePage() {
       loadGame();
     }
   }, [authenticated, identityId, router]);
+
+  // Assign diverse models to NPCs when models list becomes available
+  useEffect(() => {
+    async function assignNPCModels() {
+      if (!identity || !models || models.length === 0) return;
+
+      const npcsNeedingModels = identity.npcs.filter((npc: NPC) => !npc.assignedModel);
+      if (npcsNeedingModels.length === 0) return;
+
+      const availableModels = filterAvailableModels(models as any);
+      const assignments = assignModelsToNPCs(identity.npcs, availableModels);
+
+      let needsUpdate = false;
+      const updatedNpcs = identity.npcs.map((npc: NPC) => {
+        const assignedModel = assignments.get(npc.id);
+        if (assignedModel && !npc.assignedModel) {
+          needsUpdate = true;
+          return { ...npc, assignedModel };
+        }
+        return npc;
+      });
+
+      if (needsUpdate) {
+        const updatedIdentity = { ...identity, npcs: updatedNpcs };
+        setIdentity(updatedIdentity);
+        await saveToIndexedDB('identities', updatedIdentity);
+        console.log(`[Models] Assigned diverse models to NPCs:`,
+          updatedNpcs.map((n: NPC) => `${n.name}: ${n.assignedModel?.split('/').pop()}`).join(', '));
+      }
+    }
+
+    assignNPCModels();
+  }, [identity?.id, models]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -402,7 +437,7 @@ export default function GamePage() {
       if (autoConverseRef.current) {
         handleNpcRespond(randomNpc);
       }
-    }, 200 + Math.random() * 600);
+    }, 2000 + Math.random() * 2000); // 2-4 second delay for readable conversation pacing
 
     return () => clearTimeout(timeout);
   }, [messages, autoConverse, isResponding, identity, allConversations, conversationId]);
@@ -528,8 +563,9 @@ export default function GamePage() {
       };
       const systemPrompt = buildGroupChatPrompt(npc, identity, recentMessages, simulationHistory, revelationState);
 
-      // Get model based on NPC tier
-      const model = getModelForNPCTier(npc.tier);
+      // Get model for this NPC (uses assigned model for variety, falls back to tier-based)
+      const model = getModelForNPC(npc);
+      console.log(`[NPC Model] ${npc.name} using: ${model.split('/').pop()}`);
 
       // Search for relevant memories (skip to reduce latency/tokens)
       const relevantMemories: string[] = [];
@@ -2367,51 +2403,33 @@ function buildGroupChatPrompt(
     : 'REALISTIC mode - grounded, authentic human emotions and reactions';
 
   return `You ARE ${npc.name}. You're ${npc.role} to ${identity.name}.
-Your personality: ${npc.personality}
-Current emotional state: ${npc.currentEmotionalState}
-Your relationship with ${identity.name}: ${npc.relationshipStatus}
-Your background: ${npcBackground}
+Personality: ${npc.personality}
+Emotional state: ${npc.currentEmotionalState}
+Relationship: ${npc.relationshipStatus}
+Background: ${npcBackground}
 
-=== WHO YOU'RE TALKING TO ===
+=== CONTEXT ===
 ${conversationContext}
 
-=== THE STORY SO FAR ===
-${narrativeContext || 'No major events yet - but tensions exist.'}
+${narrativeContext ? `Recent events: ${narrativeContext}` : ''}
+
+${identity.name}'s situation: ${wealthStatus}, ${mentalStatus}.
+Mode: ${modeDescription}
+
+=== RESPONSE FORMAT ===
+- 1-2 sentences max. One action in *asterisks*.
+- Sound like a REAL PERSON - contractions, fragments, interruptions.
+- React to what others JUST SAID before adding new information.
+${bannedPhrases}
+
+=== FORBIDDEN ===
+- DO NOT make up accusations or secrets you weren't given
+- DO NOT use vague metaphors ("shadows", "strings", "fire")
+- DO NOT say "You think you can play this game?" or similar empty threats
+- DO NOT repeat what someone else just said
 
 ${revelationPrompt}
 
-=== CURRENT SITUATION ===
-${identity.name}'s situation: ${wealthStatus}, ${mentalStatus}, ${familyStatus}, ${careerStatus}.
-Mode: ${modeDescription}
-
-=== CRITICAL RULES ===
-1. BE SPECIFIC - Use actual NAMES and DETAILS. Reference real events, people, places.
-2. NO VAGUE METAPHORS - Don't say "shadows", "strings", "fire", "ashes" unless literal.
-3. HAVE A POINT - Every message should reveal, accuse, question, or change something.
-4. PROGRESS THE STORY - Don't just trade insults. Make something HAPPEN.
-5. IF YOU HAVE A REVELATION DIRECTIVE ABOVE - FOLLOW IT. Reveal the information.
-${bannedPhrases}
-
-=== BAD vs GOOD EXAMPLES ===
-BAD: "You're just a shadow, and shadows don't last long." (vague metaphor, meaningless)
-BAD: "I'm pulling the strings here." (generic power posturing)
-BAD: "You think you can play this game?" (empty threat, no specifics)
-
-GOOD: "I saw Marcus at the warehouse Tuesday night. What was he doing there?" (specific accusation)
-GOOD: "Fine. You want the truth? I've been stealing from the register. $500 a week." (concrete confession)
-GOOD: "Jordan and I dated two years ago. That's why she hates me." (relationship revelation)
-GOOD: *throws down phone* Read it. The texts between him and Sarah. All of them.
-
-=== HOW TO RESPOND ===
-- 1-2 sentences max. One action in *asterisks*.
-- Your emotional state is "${npc.currentEmotionalState}" - let that drive you.
-- Sound like a REAL PERSON. Contractions, fragments, interruptions.
-- NO quotes around dialogue. NO therapy-speak.
-- If you have a REVELATION DIRECTIVE, your response MUST include that information.
-
-=== IMAGES ===
-You can send images: [IMG:description]. If asked for a selfie, include one.
-
 /no_think
-Respond as ${npc.name}. Be SPECIFIC. Make something HAPPEN. Follow your directive.`;
+Respond as ${npc.name}. Be brief. Be specific. Follow your directive above.`;
 }

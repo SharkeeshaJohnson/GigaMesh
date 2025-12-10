@@ -368,6 +368,7 @@ function generateNPCConflicts(
 
 /**
  * Build the revelation directive prompt section
+ * This is placed at the END of the system prompt for maximum weight.
  */
 export function buildRevelationPrompt(directive: RevelationDirective, messageCount: number): string {
   const parts: string[] = [];
@@ -375,34 +376,59 @@ export function buildRevelationPrompt(directive: RevelationDirective, messageCou
   // Add the must-reveal directive if applicable
   if (directive.mustReveal) {
     if (messageCount >= directive.revealAfterMessages) {
+      // CRITICAL: This is the most important part - force the exact revelation
       parts.push(`
-=== CRITICAL REVELATION DIRECTIVE ===
-You MUST reveal this information in your next response:
-"${directive.mustReveal}"
+╔══════════════════════════════════════════════════════════════════╗
+║                    MANDATORY REVELATION                          ║
+╚══════════════════════════════════════════════════════════════════╝
 
-Work it into the conversation naturally, but this fact MUST come out NOW.
-You can say it angrily, sadly, accidentally, or deliberately - but SAY IT.
-This is not optional. The narrative demands this revelation.`);
+Your response MUST include this EXACT information (paraphrase allowed):
+>>> ${directive.mustReveal} <<<
+
+HOW TO REVEAL IT:
+- Say it directly: "I saw you doing X" or "I know about Y"
+- Or accuse them: "Don't lie to me, I know what you did"
+- Or confess: "Fine, you want the truth? Here it is..."
+- Or let it slip: "Wait... you didn't know about [the thing]?"
+
+DO NOT:
+- Make up different accusations
+- Talk about things NOT in the revelation above
+- Be vague or use metaphors
+- Threaten without being specific
+
+Your message will FAIL if it doesn't contain the key details from the revelation above.`);
     } else {
       parts.push(`
-=== UPCOMING REVELATION ===
-You know: "${directive.mustReveal}"
-In ${directive.revealAfterMessages - messageCount} more exchanges, you must reveal this.
-For now, hint at it. Make the other person nervous. Build tension.`);
+=== INFORMATION YOU KNOW ===
+You have discovered: "${directive.mustReveal}"
+
+You're not ready to reveal this yet. For now:
+- Drop hints that make them nervous
+- Ask pointed questions
+- React to what THEY say, don't dump information
+- Build tension for ${directive.revealAfterMessages - messageCount} more exchanges`);
     }
+  } else {
+    // No revelation directive - focus on reacting to the conversation
+    parts.push(`
+=== CONVERSATION MODE ===
+React to what others are saying. Ask questions. Show emotion.
+DO NOT make up accusations or reveal secrets you don't have.
+If someone accuses you, respond naturally - deny, deflect, or be honest.`);
   }
 
   // Add conversation goal
   parts.push(`
-=== YOUR GOAL THIS CONVERSATION ===
+=== YOUR GOAL ===
 ${directive.conversationGoal}`);
 
-  // Add specific conflicts
+  // Add specific conflicts (only if relevant)
   if (directive.conflicts.length > 0) {
     parts.push(`
-=== YOUR CONFLICTS ===`);
+=== TENSIONS ===`);
     for (const conflict of directive.conflicts) {
-      parts.push(`vs ${conflict.npcName}: ${conflict.conflict}`);
+      parts.push(`• ${conflict.npcName}: ${conflict.conflict}`);
     }
   }
 

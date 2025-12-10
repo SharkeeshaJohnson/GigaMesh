@@ -21,6 +21,7 @@ export interface NPC {
   deathCause?: string; // How they died
   pixelArtUrl: string; // generated sprite URL
   emotionSprites: Record<string, string>; // emotion -> sprite URL
+  assignedModel?: string; // LLM model assigned to this NPC for varied responses
 }
 
 // Starting NPC Distribution (10 guaranteed)
