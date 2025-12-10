@@ -1,15 +1,12 @@
 'use client';
 
-import { usePrivy, useIdentityToken } from '@privy-io/react-auth';
+import { usePrivy } from '@privy-io/react-auth';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { useEffect, useState, Suspense, useRef } from 'react';
 import {
   Identity,
   JumpType,
   SimulationResult,
-  SimulationEvent,
-  MeterChange,
-  NPC,
 } from '@/lib/types';
 import {
   getFromIndexedDB,
@@ -20,6 +17,22 @@ import {
 } from '@/lib/indexeddb';
 import { useChat, useMemory } from '@/lib/reverbia';
 import { MODEL_CONFIG } from '@/lib/models';
+import {
+  buildSafetyPreamble,
+  getScenarioTone,
+} from '@/lib/content-filter';
+import {
+  stripModelArtifacts,
+  extractTextContent,
+  parseJSONSafely,
+} from '@/lib/llm-utils';
+import {
+  generateSimulationDirective,
+  buildSimulationPromptAdditions,
+  processSimulationResults,
+  advanceDay,
+  getNarrativeSummary,
+} from '@/lib/narrative';
 
 function SimulatePageContent() {
   const { authenticated, ready } = usePrivy();
@@ -145,15 +158,36 @@ function SimulatePageContent() {
 
     setLoadingMessage('Running simulation...');
 
-    // Build simulation prompt
-    const prompt = buildSimulationPrompt(identity, conversations, actions, jumpDays);
+    // ============================================
+    // NARRATIVE ENGINE: Generate simulation directive
+    // ============================================
+    let narrativeAdditions = '';
+    if (identity.narrativeState) {
+      try {
+        // Generate directive based on narrative state
+        const directive = generateSimulationDirective(identity.narrativeState, jumpDays);
+        console.log('[Narrative] Simulation directive:', directive);
+
+        // Build prompt additions from narrative engine
+        narrativeAdditions = buildSimulationPromptAdditions(directive, identity);
+
+        // Log narrative summary for debugging
+        const summary = getNarrativeSummary(identity.narrativeState);
+        console.log('[Narrative] State summary:', summary);
+      } catch (narError) {
+        console.error('[Narrative] Failed to generate directive:', narError);
+      }
+    }
+
+    // Build simulation prompt (with narrative additions)
+    const prompt = buildSimulationPrompt(identity, conversations, actions, jumpDays) + narrativeAdditions;
 
     // Run simulation via AI
     const response = await sendMessage({
       messages: [
         {
           role: 'system',
-          content: 'You are a life simulation game master. Generate realistic, dramatic events based on player actions and NPC relationships. Always return valid JSON as specified. Be creative and consider consequences of actions.',
+          content: 'You are a life simulation game master. Generate realistic, dramatic events based on player actions and NPC relationships. Always return valid JSON as specified. Be creative and consider consequences of actions. Pay special attention to any NARRATIVE DIRECTIVES provided - these guide story progression.',
         },
         { role: 'user', content: prompt },
       ],
@@ -162,40 +196,35 @@ function SimulatePageContent() {
 
     setLoadingMessage('Processing results...');
 
-    // Parse results - extract content from SDK response
-    console.log('[Simulation] Raw response:', response);
-    console.log('[Simulation] Response data:', (response as any)?.data);
-
+    // Parse results - extract content from SDK response using shared utilities
     let content = '';
 
-    // Helper to extract text from content (handles both string and array formats)
-    const extractTextContent = (messageContent: any): string => {
-      if (typeof messageContent === 'string') {
-        return messageContent;
-      }
-      if (Array.isArray(messageContent)) {
-        return messageContent
-          .filter((item: any) => item.type === 'text')
-          .map((item: any) => item.text)
-          .join('');
-      }
-      return '';
-    };
-
     // Try multiple paths to find the content
+    const r = response as Record<string, unknown>;
     const paths = [
-      (response as any)?.data?.data?.choices?.[0]?.message?.content,
-      (response as any)?.data?.choices?.[0]?.message?.content,
-      (response as any)?.choices?.[0]?.message?.content,
-      (response as any)?.message?.content,
-      (response as any)?.content,
-      (response as any)?.text,
+      (r?.data as Record<string, unknown>)?.data,
+      r?.data,
+      r,
     ];
 
-    for (const path of paths) {
-      if (path) {
-        console.log('[Simulation] Trying path, found:', typeof path, Array.isArray(path) ? 'array' : '');
-        const extracted = extractTextContent(path);
+    for (const base of paths) {
+      if (!base) continue;
+      const b = base as Record<string, unknown>;
+      const choices = b?.choices as Array<{ message?: { content?: unknown } }>;
+      if (choices?.[0]?.message?.content) {
+        const extracted = extractTextContent(choices[0].message.content);
+        if (extracted) {
+          content = extracted;
+          break;
+        }
+      }
+      // Try direct content paths
+      const directContent =
+        (b as { message?: { content?: unknown } })?.message?.content ||
+        (b as { content?: unknown })?.content ||
+        (b as { text?: unknown })?.text;
+      if (directContent) {
+        const extracted = extractTextContent(directContent);
         if (extracted) {
           content = extracted;
           break;
@@ -203,8 +232,8 @@ function SimulatePageContent() {
       }
     }
 
-    console.log('[Simulation] Extracted content length:', content.length);
-    console.log('[Simulation] Extracted content preview:', content.substring(0, 200));
+    // Strip model artifacts before parsing
+    content = stripModelArtifacts(content);
 
     const parsed = parseSimulationResponse(content);
     console.log('[Simulation] Parsed result:', parsed);
@@ -232,6 +261,29 @@ function SimulatePageContent() {
 
     // Update day
     updated.currentDay = result.toDay;
+
+    // ============================================
+    // NARRATIVE ENGINE: Process simulation results
+    // ============================================
+    if (updated.narrativeState) {
+      try {
+        // Advance the narrative day
+        let narrativeState = advanceDay(updated.narrativeState, result.toDay);
+
+        // Process simulation results through narrative engine
+        narrativeState = processSimulationResults(narrativeState, result, identity);
+
+        updated.narrativeState = narrativeState;
+
+        console.log('[Narrative] Updated after simulation:',
+          `Day ${narrativeState.currentDay}`,
+          `Tension: ${narrativeState.globalTension}`,
+          `Active arcs: ${narrativeState.activeArcs.length}`
+        );
+      } catch (narError) {
+        console.error('[Narrative] Failed to process results:', narError);
+      }
+    }
 
     // Apply meter changes
     for (const change of result.meterChanges) {
@@ -599,48 +651,98 @@ function buildSimulationPrompt(
   actions: any[],
   jumpDays: number
 ): string {
-  const coreNPCs = identity.npcs.filter((n) => n.tier === 'core');
+  // Build player background from structured data
+  const playerBackground = identity.scenario.briefBackground?.length > 0
+    ? identity.scenario.briefBackground.map(b => `• ${b}`).join('\n')
+    : identity.scenario.backstory;
+
+  const playerStory = identity.scenario.currentStory?.length > 0
+    ? identity.scenario.currentStory.map(b => `• ${b}`).join('\n')
+    : '';
+
+  // Build NPC details with their bullets
+  const npcDetails = identity.npcs.map((n) => {
+    const npcBackground = n.bullets?.length > 0
+      ? n.bullets.map(b => `  • ${b}`).join('\n')
+      : `  • ${n.backstory}`;
+    return `- ${n.name} (${n.role}) [${n.tier}]
+  Personality: ${n.personality}
+  Current mood: ${n.currentEmotionalState}
+  Relationship: ${n.relationshipStatus}
+${npcBackground}
+  ${n.offScreenMemories.length > 0 ? `Secrets: ${n.offScreenMemories.join('; ')}` : ''}`;
+  }).join('\n\n');
+
   const conversationSummary = conversations
-    .map((c) => `Conversation with NPC ${c.npcId}: ${c.messages.length} messages`)
+    .map((c) => {
+      const npc = identity.npcs.find(n => n.id === c.npcId);
+      return `Conversation with ${npc?.name || 'Unknown'}: ${c.messages.length} messages`;
+    })
     .join('\n');
   const actionSummary = actions.map((a) => a.content).join('\n');
 
   return `Simulate ${jumpDays} day(s) for this life simulation game.
 
-PLAYER: ${identity.name}
+=== THE PLAYER ===
+NAME: ${identity.name}
 PROFESSION: ${identity.scenario.profession}
-CURRENT DAY: ${identity.currentDay}
-DIFFICULTY: ${identity.difficulty}
+WORKPLACE: ${identity.scenario.workplace}
+BACKGROUND:
+${playerBackground}
+${playerStory ? `CURRENT SITUATION:\n${playerStory}` : ''}
 
-CURRENT METERS:
-- Family Harmony: ${identity.meters.familyHarmony}
-- Career Standing: ${identity.meters.careerStanding}
-- Wealth: ${identity.meters.wealth}
-- Mental Health: ${identity.meters.mentalHealth}
-- Reputation: ${identity.meters.reputation}
+=== CURRENT DAY: ${identity.currentDay} ===
 
-CORE NPCS (generate off-screen events for these):
-${coreNPCs.map((n) => `- ${n.name} (${n.role}): ${n.personality}. Current state: ${n.currentEmotionalState}`).join('\n')}
+=== METERS ===
+- Family Harmony: ${identity.meters.familyHarmony}/100
+- Career Standing: ${identity.meters.careerStanding}/100
+- Wealth: ${identity.meters.wealth}/100
+- Mental Health: ${identity.meters.mentalHealth}/100
+- Reputation: ${identity.meters.reputation}/100
 
-TODAY'S CONVERSATIONS:
+=== ALL NPCS ===
+${npcDetails}
+
+=== TODAY'S ACTIVITY ===
+CONVERSATIONS:
 ${conversationSummary || 'No conversations today.'}
 
 QUEUED ACTIONS:
 ${actionSummary || 'No actions queued.'}
 
-${identity.difficulty === 'dramatic' ? 'Include dramatic events, secrets revealed, tensions. Adult themes allowed.' : ''}
-${identity.difficulty === 'crazy' ? 'Include extreme, chaotic events. Maximum drama. Fully unfiltered.' : ''}
+=== DIFFICULTY: ${identity.difficulty.toUpperCase()} ===
+${getScenarioTone(identity.difficulty)}
 
-Generate realistic consequences based on conversations and actions. Core NPCs should have off-screen events that the player will discover later.
+=== CONTENT GUIDELINES ===
+${buildSafetyPreamble(identity.difficulty)}
 
-Return ONLY valid JSON in this format:
+=== INSTRUCTIONS ===
+CRITICAL: You MUST process ALL queued actions. Each action the player queued MUST have consequences.
+If the player killed/attacked an NPC, that NPC MUST be marked as dead/injured in npcChanges.
+
+Generate events based on:
+1. FIRST: Direct consequences of each queued action (if player killed someone, show it!)
+2. The player's background and current situation
+3. Each NPC's personality, background, and secrets
+4. Today's conversations
+5. Existing relationship dynamics
+
+For violent actions (kill, attack, hurt):
+- Create an event describing what happened
+- Add npcChanges with changeType "death" for killed NPCs
+- Update relevant meters (mentalHealth down, reputation down if caught, etc.)
+
+NPCs should also have off-screen events based on THEIR backgrounds and motivations.
+Events should feel connected to established character traits.
+
+Return ONLY valid JSON:
 {
   "events": [
     {
-      "title": "string",
-      "description": "string",
+      "title": "Short punchy title",
+      "description": "What happened (2-3 sentences max)",
       "involvedNpcs": ["npc names"],
-      "consequenceChain": "cause → effect chain",
+      "consequenceChain": "cause → effect",
       "severity": "minor" | "moderate" | "major" | "life-changing"
     }
   ],
@@ -649,14 +751,14 @@ Return ONLY valid JSON in this format:
       "meter": "familyHarmony" | "careerStanding" | "wealth" | "mentalHealth" | "reputation",
       "previousValue": number,
       "newValue": number,
-      "reason": "string"
+      "reason": "Brief reason"
     }
   ],
   "npcChanges": [
     {
-      "npcId": "string (use NPC name for now)",
-      "changeType": "relationship" | "status" | "knowledge" | "emotional",
-      "description": "string"
+      "npcId": "NPC name",
+      "changeType": "relationship" | "status" | "knowledge" | "emotional" | "death",
+      "description": "What changed"
     }
   ]
 }`;

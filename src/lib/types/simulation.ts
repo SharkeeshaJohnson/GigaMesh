@@ -2,7 +2,7 @@ import { NPC } from './npc';
 
 export type JumpType = 'day' | 'week';
 export type EventSeverity = 'minor' | 'moderate' | 'major' | 'life-changing';
-export type ChangeType = 'relationship' | 'status' | 'knowledge' | 'emotional';
+export type ChangeType = 'relationship' | 'status' | 'knowledge' | 'emotional' | 'death';
 
 export interface SimulationEvent {
   id: string;

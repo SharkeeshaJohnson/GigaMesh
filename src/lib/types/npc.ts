@@ -11,6 +11,7 @@ export interface NPC {
   spawnTrigger?: string; // What caused them to appear (if emergent)
   personality: string;
   backstory: string;
+  bullets: string[]; // 2 short bullet points about the NPC
   currentEmotionalState: string;
   relationshipStatus: string; // with player
   offScreenMemories: string[]; // events player doesn't know

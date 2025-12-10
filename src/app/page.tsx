@@ -2,11 +2,13 @@
 
 import { usePrivy } from '@privy-io/react-auth';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export default function LandingPage() {
   const { login, authenticated, ready } = usePrivy();
   const router = useRouter();
+  const [titleText, setTitleText] = useState('');
+  const [showContent, setShowContent] = useState(false);
 
   useEffect(() => {
     if (ready && authenticated) {
@@ -14,83 +16,143 @@ export default function LandingPage() {
     }
   }, [ready, authenticated, router]);
 
+  // Typewriter effect for title
+  useEffect(() => {
+    if (!ready) return;
+
+    const finalText = 'SPROUTS';
+    let currentIndex = 0;
+
+    const typeInterval = setInterval(() => {
+      if (currentIndex <= finalText.length) {
+        setTitleText(finalText.slice(0, currentIndex));
+        currentIndex++;
+      } else {
+        clearInterval(typeInterval);
+        setTimeout(() => setShowContent(true), 300);
+      }
+    }, 100);
+
+    return () => clearInterval(typeInterval);
+  }, [ready]);
+
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center p-8 relative overflow-hidden">
-      {/* Animated background grid */}
-      <div className="absolute inset-0 opacity-10">
-        <div
-          className="w-full h-full"
-          style={{
-            backgroundImage: `
-              linear-gradient(var(--pixel-border) 1px, transparent 1px),
-              linear-gradient(90deg, var(--pixel-border) 1px, transparent 1px)
-            `,
-            backgroundSize: '32px 32px',
-          }}
-        />
-      </div>
-
-      <div className="max-w-2xl text-center relative z-10">
-        {/* Decorative corner pieces */}
-        <div className="absolute -top-4 -left-4 w-8 h-8 border-t-4 border-l-4 border-[var(--pixel-gold)]" />
-        <div className="absolute -top-4 -right-4 w-8 h-8 border-t-4 border-r-4 border-[var(--pixel-gold)]" />
-        <div className="absolute -bottom-4 -left-4 w-8 h-8 border-b-4 border-l-4 border-[var(--pixel-gold)]" />
-        <div className="absolute -bottom-4 -right-4 w-8 h-8 border-b-4 border-r-4 border-[var(--pixel-gold)]" />
-
-        {/* Logo/Title */}
-        <div className="mb-8">
-          <h1 className="pixel-title-large mb-4">LifeSim</h1>
-          <p className="pixel-text text-[var(--pixel-text-dim)] text-2xl">
-            Your choices. Your consequences. Your life.
-          </p>
-        </div>
-
-        {/* Description */}
-        <div className="pixel-frame mb-8 text-left">
-          <p className="pixel-text text-[var(--pixel-text)] mb-6">
-            Step into a hyper-personalized life simulation where every decision ripples through your
-            world. Build relationships with AI-driven characters who remember everything, pursue
-            your ambitions, and watch as consequences unfold in unexpected ways.
-          </p>
-
-          <div className="pixel-frame-inset">
-            <ul className="space-y-3">
-              <li className="flex items-center gap-3">
-                <span className="pixel-label text-[var(--pixel-gold)]">&gt;</span>
-                <span className="pixel-text">10+ unique NPCs with distinct personalities</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <span className="pixel-label text-[var(--pixel-gold)]">&gt;</span>
-                <span className="pixel-text">Emergent storytelling that adapts to you</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <span className="pixel-label text-[var(--pixel-gold)]">&gt;</span>
-                <span className="pixel-text">Consequence chains that spread like wildfire</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <span className="pixel-label text-[var(--pixel-gold)]">&gt;</span>
-                <span className="pixel-text">4 save slots for different lives</span>
-              </li>
-            </ul>
+    <main className="min-h-screen flex items-center justify-center p-4 relative">
+      {/* Centered Window */}
+      <div className="win95-window w-full max-w-lg">
+        {/* Title Bar */}
+        <div className="win95-titlebar">
+          <span className="win95-titlebar-text">Welcome to Sprouts</span>
+          <div className="win95-titlebar-buttons">
+            <button className="win95-titlebar-btn">_</button>
+            <button className="win95-titlebar-btn">□</button>
+            <button className="win95-titlebar-btn">×</button>
           </div>
         </div>
 
-        {/* CTA */}
-        {ready ? (
-          <button onClick={login} className="pixel-btn pixel-btn-primary text-sm px-10 py-4">
-            Begin Your Story
-          </button>
-        ) : (
-          <div className="pixel-text text-[var(--pixel-text-dim)]">
-            <span className="pixel-loading">Loading</span>
-          </div>
-        )}
+        {/* Content */}
+        <div className="win95-content p-8">
+          {/* Logo Area */}
+          <div className="text-center mb-8">
+            {/* Decorative icon */}
+            <div className="inline-block mb-4">
+              <div
+                className="w-16 h-16 mx-auto"
+                style={{
+                  background: 'linear-gradient(135deg, var(--win95-lightest) 0%, var(--win95-accent-light) 100%)',
+                  border: '2px solid var(--win95-border-dark)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '32px',
+                }}
+              >
+                🌱
+              </div>
+            </div>
 
-        {/* Footer */}
-        <p className="mt-8 pixel-text-small">
-          18+ &bull; Unfiltered content &bull; Your data stays local
-        </p>
+            {/* Title with cursor */}
+            <h1
+              className="win95-title-lg text-center mb-2"
+              style={{
+                letterSpacing: '4px',
+                minHeight: '48px',
+              }}
+            >
+              {titleText}
+              <span className="win95-blink" style={{ marginLeft: '2px' }}>_</span>
+            </h1>
+
+            <p className="win95-subtitle" style={{ color: 'var(--win95-text-dim)' }}>
+              Life Simulation Game
+            </p>
+          </div>
+
+          {/* Divider */}
+          <div className="win95-divider mb-6" />
+
+          {/* Description */}
+          <div className="win95-panel-inset p-4 mb-6">
+            <p className="win95-text text-center" style={{ lineHeight: '1.6' }}>
+              Your choices. Your consequences. Your life.
+            </p>
+            <p className="win95-text-sm text-center mt-2" style={{ color: 'var(--win95-text-dim)' }}>
+              Create a character, build relationships, and navigate the drama of everyday life in this unfiltered simulation.
+            </p>
+          </div>
+
+          {/* Action Buttons */}
+          <div className={`flex flex-col gap-3 transition-opacity duration-300 ${showContent ? 'opacity-100' : 'opacity-0'}`}>
+            {ready && !authenticated && (
+              <>
+                <button
+                  onClick={login}
+                  className="win95-btn win95-btn-lg w-full"
+                  style={{
+                    background: 'var(--win95-title-active)',
+                    color: 'white',
+                    borderColor: 'var(--win95-accent-light) var(--win95-accent) var(--win95-accent) var(--win95-accent-light)',
+                  }}
+                >
+                  Sign Up / Log In
+                </button>
+                <p className="win95-text-sm text-center" style={{ color: 'var(--win95-text-dim)' }}>
+                  Create an account or sign in to continue
+                </p>
+              </>
+            )}
+
+            {!ready && (
+              <div className="text-center py-4">
+                <span className="win95-text win95-loading">Loading</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Status Bar */}
+        <div className="win95-statusbar">
+          <div className="win95-statusbar-section">
+            Ready
+          </div>
+          <div className="win95-statusbar-section" style={{ flex: '0 0 auto', width: '100px' }}>
+            v1.0
+          </div>
+        </div>
       </div>
+
+      {/* Background decoration - subtle grid pattern */}
+      <div
+        className="fixed inset-0 pointer-events-none -z-10"
+        style={{
+          backgroundImage: `
+            linear-gradient(var(--win95-dark) 1px, transparent 1px),
+            linear-gradient(90deg, var(--win95-dark) 1px, transparent 1px)
+          `,
+          backgroundSize: '32px 32px',
+          opacity: 0.1,
+        }}
+      />
     </main>
   );
 }

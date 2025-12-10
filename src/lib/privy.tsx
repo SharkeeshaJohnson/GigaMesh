@@ -15,8 +15,8 @@ export function PrivyProvider({ children }: PrivyProviderProps) {
       appId={PRIVY_APP_ID}
       config={{
         appearance: {
-          theme: 'light',
-          accentColor: '#4A3F30',
+          theme: 'dark',
+          accentColor: '#715aff',
         },
         loginMethods: ['email', 'wallet'],
       }}

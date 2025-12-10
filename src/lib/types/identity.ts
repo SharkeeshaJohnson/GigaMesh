@@ -1,10 +1,20 @@
 import { NPC } from './npc';
+import type { StorySeed, NarrativeState } from '../narrative';
 
 export type Gender = 'male' | 'female';
 export type Difficulty = 'realistic' | 'dramatic' | 'crazy';
 
-// All available personas for character creation
-export type Persona =
+/**
+ * Persona type - now simplified since visual sprites are decoupled from gameplay.
+ * The persona ID is from the persona-pools.ts system.
+ */
+export type PersonaId = string;
+
+/**
+ * @deprecated - Legacy persona type for backwards compatibility with old saves.
+ * New saves use PersonaId from persona-pools.ts instead.
+ */
+export type LegacyPersona =
   | 'man'
   | 'woman'
   | 'gay-man'
@@ -20,26 +30,16 @@ export type Persona =
   | 'fat-boy'
   | 'black-man'
   | 'black-woman'
-  | 'doctor';
+  | 'doctor'
+  | 'executive'
+  | 'influencer'
+  | 'grandmother'
+  | 'ex-convict'
+  | 'startup-founder'
+  | 'trophy-wife';
 
-export const PERSONA_OPTIONS: { value: Persona; label: string; description: string }[] = [
-  { value: 'man', label: 'Man', description: 'A regular man navigating life' },
-  { value: 'woman', label: 'Woman', description: 'A regular woman navigating life' },
-  { value: 'gay-man', label: 'Gay Man', description: 'A gay man with unique relationship dynamics' },
-  { value: 'gay-woman', label: 'Gay Woman', description: 'A lesbian woman with unique relationship dynamics' },
-  { value: 'transexual', label: 'Transexual', description: 'Navigating identity and transformation' },
-  { value: 'teacher', label: 'Teacher', description: 'An educator with students and colleagues' },
-  { value: 'student', label: 'Student', description: 'A student navigating academic and social life' },
-  { value: 'closeted-gay', label: 'Closeted Gay', description: 'Hiding true identity from family and friends' },
-  { value: 'closeted-bully', label: 'Closeted Bully', description: 'A bully hiding their own insecurities' },
-  { value: 'dominatrix', label: 'Dominatrix', description: 'A powerful figure in the BDSM scene' },
-  { value: 'reptile', label: 'Reptile', description: 'A cold-blooded character with unique instincts' },
-  { value: 'fat-girl', label: 'Fat Girl', description: 'Navigating body image and self-acceptance' },
-  { value: 'fat-boy', label: 'Fat Boy', description: 'Navigating body image and self-acceptance' },
-  { value: 'black-man', label: 'Black Man', description: 'Navigating life with cultural experiences' },
-  { value: 'black-woman', label: 'Black Woman', description: 'Navigating life with cultural experiences' },
-  { value: 'doctor', label: 'Doctor', description: 'A medical professional with life-and-death decisions' },
-];
+// Keep Persona as union for backwards compatibility
+export type Persona = LegacyPersona | PersonaId;
 
 export interface Meters {
   familyHarmony: number;    // 0-100
@@ -69,7 +69,19 @@ export interface Scenario {
   workplace: string;
   familyStructure: FamilyStructure;
   livingSituation: string;
-  backstory: string;
+  backstory: string; // Legacy field
+  briefBackground: string[]; // 2 bullet points about past
+  currentStory: string[]; // 2 bullet points about present
+}
+
+/**
+ * Generated persona details - created by LLM based on persona template
+ */
+export interface GeneratedPersona {
+  templateId: string; // Reference to PersonaTemplate.id from persona-pools.ts
+  type: string; // Human-readable type (e.g., "Ambitious Professional")
+  traits: string[]; // Actual traits for this character
+  situation: string; // Current life situation
 }
 
 export interface Identity {
@@ -77,12 +89,17 @@ export interface Identity {
   slotIndex: number; // 0-3 (4 save slots)
   name: string;
   gender: Gender; // Keep for backwards compatibility
-  persona: Persona; // New: the chosen persona/identity type
+  persona: Persona; // Legacy field - kept for old saves
+  generatedPersona?: GeneratedPersona; // New: detailed persona from pool system
   difficulty: Difficulty;
   scenario: Scenario;
   currentDay: number;
   meters: Meters;
   npcs: NPC[]; // Starting NPCs (more can spawn through gameplay)
+  storySeeds?: StorySeed[]; // Legacy: simple story seeds (deprecated, use narrativeState)
+  narrativeState?: NarrativeState; // Full narrative engine state
+  pixelArtUrl?: string; // Player character sprite URL
+  spriteIndex?: number; // Index of selected sprite (visual only, not gameplay)
   createdAt: Date;
   lastPlayedAt: Date;
 }

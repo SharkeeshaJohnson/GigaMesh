@@ -11,11 +11,12 @@ interface SaveSlot {
   identity: Identity | null;
 }
 
-export default function SaveSlotPage() {
+export default function PlayPage() {
   const { authenticated, ready, logout } = usePrivy();
   const router = useRouter();
   const [slots, setSlots] = useState<SaveSlot[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
 
   useEffect(() => {
     if (ready && !authenticated) {
@@ -48,6 +49,20 @@ export default function SaveSlotPage() {
   }, [authenticated]);
 
   const handleSlotClick = (slot: SaveSlot) => {
+    setSelectedSlot(slot.index);
+  };
+
+  const handleSlotDoubleClick = (slot: SaveSlot) => {
+    if (slot.identity) {
+      router.push(`/play/${slot.identity.id}`);
+    } else {
+      router.push(`/create?slot=${slot.index}`);
+    }
+  };
+
+  const handleOpen = () => {
+    if (selectedSlot === null) return;
+    const slot = slots[selectedSlot];
     if (slot.identity) {
       router.push(`/play/${slot.identity.id}`);
     } else {
@@ -57,131 +72,192 @@ export default function SaveSlotPage() {
 
   if (!ready || loading) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-[var(--pixel-bg-dark)]">
-        <div className="pixel-text text-[var(--pixel-text-dim)]">
-          <span className="pixel-loading">Loading saves</span>
+      <main className="min-h-screen flex items-center justify-center">
+        <div className="win95-window p-8">
+          <span className="win95-text win95-loading">Loading saves</span>
         </div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center p-8 bg-[var(--pixel-bg-dark)] relative">
-      {/* Scanline overlay */}
-      <div className="pixel-scanline" />
-
-      {/* Background grid */}
-      <div className="absolute inset-0 opacity-5">
-        <div
-          className="w-full h-full"
-          style={{
-            backgroundImage: `
-              linear-gradient(var(--pixel-border) 1px, transparent 1px),
-              linear-gradient(90deg, var(--pixel-border) 1px, transparent 1px)
-            `,
-            backgroundSize: '24px 24px',
-          }}
-        />
-      </div>
-
-      <div className="max-w-4xl w-full relative z-10">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="pixel-title text-[var(--pixel-gold)] mb-2">SELECT SAVE</h1>
-            <p className="pixel-text-small text-[var(--pixel-text-dim)]">Choose a life to continue or start anew</p>
+    <main className="min-h-screen flex items-center justify-center p-4">
+      {/* Main Window */}
+      <div className="win95-window w-full max-w-3xl">
+        {/* Title Bar */}
+        <div className="win95-titlebar">
+          <span className="win95-titlebar-text">Sprouts - Save Files</span>
+          <div className="win95-titlebar-buttons">
+            <button className="win95-titlebar-btn">_</button>
+            <button className="win95-titlebar-btn">□</button>
+            <button className="win95-titlebar-btn" onClick={logout}>×</button>
           </div>
-          <button onClick={logout} className="pixel-btn text-xs">
-            LOG OUT
+        </div>
+
+        {/* Menu Bar */}
+        <div className="win95-menubar">
+          <span className="win95-menu-item"><u>F</u>ile</span>
+          <span className="win95-menu-item"><u>E</u>dit</span>
+          <span className="win95-menu-item"><u>V</u>iew</span>
+          <span className="win95-menu-item"><u>H</u>elp</span>
+        </div>
+
+        {/* Toolbar */}
+        <div className="win95-toolbar">
+          <button className="win95-btn win95-btn-sm" onClick={handleOpen} disabled={selectedSlot === null}>
+            Open
+          </button>
+          <div className="win95-toolbar-separator" />
+          <button className="win95-btn win95-btn-sm" onClick={logout}>
+            Log Out
           </button>
         </div>
 
-        {/* Save slots grid */}
-        <div className="grid grid-cols-2 gap-6">
-          {slots.map((slot, idx) => {
-            const allEmpty = slots.every(s => !s.identity);
-            const isFirstEmptySlot = allEmpty && idx === 0;
+        {/* Content - Save Slots Grid */}
+        <div className="win95-content" style={{ minHeight: '400px' }}>
+          {/* Address bar style header */}
+          <div className="win95-panel-inset mb-4 p-2 flex items-center gap-2">
+            <span className="win95-text-sm" style={{ color: 'var(--win95-text-dim)' }}>Location:</span>
+            <span className="win95-text">C:\Sprouts\Saves\</span>
+          </div>
 
-            return (
-              <button
-                key={slot.index}
-                onClick={() => handleSlotClick(slot)}
-                className={`pixel-frame text-left min-h-[200px] flex flex-col relative transition-all hover:scale-[1.02] hover:border-[var(--pixel-gold)] ${
-                  isFirstEmptySlot ? 'border-[var(--pixel-gold)] animate-pulse' : ''
-                }`}
-              >
-                {isFirstEmptySlot && (
-                  <div className="absolute -top-6 left-1/2 -translate-x-1/2 pixel-label text-[var(--pixel-gold)] text-xs whitespace-nowrap animate-bounce">
-                    &gt;&gt; START HERE &lt;&lt;
+          {/* Slots Grid - Icon View Style */}
+          <div className="win95-panel-inset p-4" style={{ background: 'white', minHeight: '300px' }}>
+            <div className="grid grid-cols-4 gap-4">
+              {slots.map((slot) => (
+                <button
+                  key={slot.index}
+                  onClick={() => handleSlotClick(slot)}
+                  onDoubleClick={() => handleSlotDoubleClick(slot)}
+                  className={`flex flex-col items-center p-3 transition-colors ${
+                    selectedSlot === slot.index
+                      ? 'bg-[var(--win95-title-active)]'
+                      : 'hover:bg-[var(--win95-lightest)]'
+                  }`}
+                  style={{
+                    border: 'none',
+                    background: selectedSlot === slot.index ? 'var(--win95-title-active)' : 'transparent',
+                    outline: selectedSlot === slot.index ? '1px dotted white' : 'none',
+                    outlineOffset: '-2px',
+                  }}
+                >
+                  {/* Icon */}
+                  <div
+                    className="w-12 h-12 mb-2 flex items-center justify-center text-2xl"
+                    style={{
+                      background: slot.identity
+                        ? 'linear-gradient(180deg, var(--win95-lightest) 0%, var(--win95-light) 100%)'
+                        : 'var(--win95-mid)',
+                      border: '2px solid var(--win95-border-dark)',
+                    }}
+                  >
+                    {slot.identity ? (
+                      slot.identity.pixelArtUrl ? (
+                        <img
+                          src={slot.identity.pixelArtUrl}
+                          alt={slot.identity.name}
+                          className="w-10 h-10 object-contain"
+                          style={{ imageRendering: 'pixelated' }}
+                        />
+                      ) : (
+                        '👤'
+                      )
+                    ) : (
+                      <span style={{ color: 'var(--win95-text-dim)' }}>+</span>
+                    )}
                   </div>
-                )}
 
-                {/* Slot number badge */}
-                <div className="absolute -top-3 -left-1 bg-[var(--pixel-surface)] border-2 border-[var(--pixel-border)] px-3 py-1">
-                  <span className="pixel-label text-[var(--pixel-text-dim)]">SLOT {slot.index + 1}</span>
-                </div>
-
-                {slot.identity ? (
-                  <div className="pt-4 flex flex-col h-full">
-                    {/* Character name */}
-                    <h2 className="pixel-title text-lg text-[var(--pixel-parchment)] mb-3">
-                      {slot.identity.name}
-                    </h2>
-
-                    {/* Stats */}
-                    <div className="pixel-frame-inset p-3 mb-3">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="pixel-label text-[var(--pixel-text-dim)] w-16">CLASS:</span>
-                        <span className="pixel-text text-[var(--pixel-text)]">{slot.identity.scenario.profession}</span>
-                      </div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="pixel-label text-[var(--pixel-text-dim)] w-16">DAY:</span>
-                        <span className="pixel-text text-[var(--pixel-gold)]">{slot.identity.currentDay}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="pixel-label text-[var(--pixel-text-dim)] w-16">MODE:</span>
-                        <span className={`pixel-text uppercase ${
-                          slot.identity.difficulty === 'hard' ? 'text-[var(--pixel-red)]' :
-                          slot.identity.difficulty === 'medium' ? 'text-[var(--pixel-gold)]' :
-                          'text-[var(--pixel-green)]'
-                        }`}>
-                          {slot.identity.difficulty}
+                  {/* Label */}
+                  <span
+                    className="text-center text-sm leading-tight"
+                    style={{
+                      color: selectedSlot === slot.index ? 'white' : 'var(--win95-text)',
+                      fontFamily: "'VT323', monospace",
+                      fontSize: '16px',
+                      wordBreak: 'break-word',
+                    }}
+                  >
+                    {slot.identity ? (
+                      <>
+                        {slot.identity.name}
+                        <br />
+                        <span style={{ fontSize: '14px', opacity: 0.8 }}>
+                          Day {slot.identity.currentDay}
                         </span>
-                      </div>
-                    </div>
+                      </>
+                    ) : (
+                      <>
+                        Slot {slot.index + 1}
+                        <br />
+                        <span style={{ fontSize: '14px', opacity: 0.7 }}>(Empty)</span>
+                      </>
+                    )}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
 
-                    {/* Bottom tags */}
-                    <div className="mt-auto flex gap-2">
-                      <span className="pixel-tag">
-                        {slot.identity.npcs.length} NPCs
-                      </span>
-                      <span className="pixel-tag">
-                        {slot.identity.persona || (slot.identity.gender === 'male' ? '♂ MALE' : '♀ FEMALE')}
+          {/* Details Panel */}
+          {selectedSlot !== null && (
+            <div className="win95-groupbox mt-4">
+              <span className="win95-groupbox-label">Details</span>
+              <div className="grid grid-cols-2 gap-4">
+                {slots[selectedSlot].identity ? (
+                  <>
+                    <div>
+                      <span className="win95-label">Name:</span>
+                      <span className="win95-text">{slots[selectedSlot].identity!.name}</span>
+                    </div>
+                    <div>
+                      <span className="win95-label">Profession:</span>
+                      <span className="win95-text">{slots[selectedSlot].identity!.scenario.profession}</span>
+                    </div>
+                    <div>
+                      <span className="win95-label">Day:</span>
+                      <span className="win95-text">{slots[selectedSlot].identity!.currentDay}</span>
+                    </div>
+                    <div>
+                      <span className="win95-label">NPCs:</span>
+                      <span className="win95-text">{slots[selectedSlot].identity!.npcs.length} characters</span>
+                    </div>
+                    <div>
+                      <span className="win95-label">Difficulty:</span>
+                      <span className="win95-text" style={{ textTransform: 'capitalize' }}>
+                        {slots[selectedSlot].identity!.difficulty}
                       </span>
                     </div>
-
-                    {/* Continue indicator */}
-                    <div className="absolute bottom-3 right-3 pixel-label text-[var(--pixel-green)] animate-pulse">
-                      &gt; CONTINUE
+                    <div>
+                      <span className="win95-label">Mode:</span>
+                      <span className="win95-text" style={{ textTransform: 'capitalize' }}>
+                        {slots[selectedSlot].identity!.persona?.replace(/-/g, ' ') || 'Default'}
+                      </span>
                     </div>
-                  </div>
+                  </>
                 ) : (
-                  <div className="flex-1 flex flex-col items-center justify-center pt-4">
-                    <div className="pixel-title text-4xl text-[var(--pixel-text-dim)] mb-3">+</div>
-                    <div className="pixel-label text-[var(--pixel-text-dim)]">EMPTY SLOT</div>
-                    <div className="pixel-text-small text-[var(--pixel-text-dim)] mt-2">Click to begin</div>
+                  <div className="col-span-2">
+                    <span className="win95-text" style={{ color: 'var(--win95-text-dim)' }}>
+                      Empty save slot. Double-click to create a new character.
+                    </span>
                   </div>
                 )}
-              </button>
-            );
-          })}
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Footer hint */}
-        <div className="mt-8 text-center">
-          <p className="pixel-text-small text-[var(--pixel-text-dim)]">
-            Each slot is a separate life with its own choices and consequences
-          </p>
+        {/* Status Bar */}
+        <div className="win95-statusbar">
+          <div className="win95-statusbar-section">
+            {selectedSlot !== null
+              ? slots[selectedSlot].identity
+                ? `Selected: ${slots[selectedSlot].identity!.name}`
+                : 'Selected: Empty Slot'
+              : 'Select a save slot'}
+          </div>
+          <div className="win95-statusbar-section" style={{ flex: '0 0 auto', width: '120px' }}>
+            {slots.filter(s => s.identity).length} of {MAX_SAVE_SLOTS} slots
+          </div>
         </div>
       </div>
     </main>

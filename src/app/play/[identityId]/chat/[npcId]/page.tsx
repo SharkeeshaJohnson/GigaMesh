@@ -1,6 +1,6 @@
 'use client';
 
-import { usePrivy, useIdentityToken } from '@privy-io/react-auth';
+import { usePrivy } from '@privy-io/react-auth';
 import { useRouter, useParams } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';
 import { Identity, NPC, Conversation, Message } from '@/lib/types';
@@ -11,10 +11,23 @@ import {
 } from '@/lib/indexeddb';
 import { useChat, useMemory } from '@/lib/reverbia';
 import { MODEL_CONFIG, getModelForNPCTier } from '@/lib/models';
+import {
+  getNPCBehaviorGuidelines,
+  PROHIBITED_CONTENT_PROMPT,
+} from '@/lib/content-filter';
+import {
+  stripModelArtifacts,
+  extractContentFromResponse,
+  sanitizeUserInput,
+} from '@/lib/llm-utils';
+import {
+  recordPlayerAction,
+  getActiveStorySummary,
+  getRelevantFactsForNPC,
+} from '@/lib/narrative';
 
 export default function ChatPage() {
   const { authenticated, ready } = usePrivy();
-  const { identityToken } = useIdentityToken();
   const router = useRouter();
   const params = useParams();
   const identityId = params.identityId as string;
@@ -30,35 +43,26 @@ export default function ChatPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Track accumulated stream content
+  const streamAccumulatorRef = useRef('');
+
   const { sendMessage, isLoading, stop } = useChat({
+    onData: (chunk) => {
+      // Accumulate chunks and strip think tags as we go
+      streamAccumulatorRef.current += chunk;
+      const cleanedSoFar = stripModelArtifacts(streamAccumulatorRef.current);
+      setStreamingMessage(cleanedSoFar);
+    },
+    onFinish: () => {
+      // Reset accumulator when done
+      streamAccumulatorRef.current = '';
+    },
     onError: (error) => {
       console.error('Chat error:', error);
       setStreamingMessage('');
+      streamAccumulatorRef.current = '';
     },
   });
-
-  // Helper to extract content from API response
-  const extractContent = (response: any): string => {
-    if (typeof response === 'string') return response;
-    if (!response) return '';
-
-    const messageContent = (response as any)?.data?.choices?.[0]?.message?.content;
-
-    if (Array.isArray(messageContent)) {
-      return messageContent
-        .filter((item: any) => item.type === 'text')
-        .map((item: any) => item.text)
-        .join('');
-    } else if (typeof messageContent === 'string') {
-      return messageContent;
-    }
-
-    return (response as any)?.choices?.[0]?.message?.content
-      || (response as any)?.message?.content
-      || (response as any)?.content
-      || (response as any)?.text
-      || 'I could not respond.';
-  };
 
   const { searchMemories, extractMemoriesFromMessage } = useMemory();
 
@@ -115,7 +119,8 @@ export default function ChatPage() {
   const handleSend = async () => {
     if (!input.trim() || !npc || !identity || isLoading) return;
 
-    const userInput = input.trim();
+    // SECURITY: Sanitize user input to prevent prompt injection
+    const userInput = sanitizeUserInput(input.trim());
     const userMessage: Message = {
       role: 'user',
       content: userInput,
@@ -125,10 +130,38 @@ export default function ChatPage() {
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
     setInput('');
-    setStreamingMessage('...');
+    streamAccumulatorRef.current = ''; // Reset accumulator
+    setStreamingMessage(''); // Will populate via onData streaming
 
-    // Build system prompt for NPC
-    const systemPrompt = buildNPCSystemPrompt(npc, identity, messages);
+    // ============================================
+    // NARRATIVE ENGINE: Record player action
+    // ============================================
+    let updatedIdentity = identity;
+    if (identity.narrativeState) {
+      try {
+        const updatedNarrativeState = recordPlayerAction(
+          identity.narrativeState,
+          userInput,
+          npc.id,
+          'chat',
+          undefined, // no group participants in 1:1 chat
+          identity
+        );
+        updatedIdentity = {
+          ...identity,
+          narrativeState: updatedNarrativeState,
+        };
+        // Save updated narrative state
+        await saveToIndexedDB('identities', updatedIdentity);
+        setIdentity(updatedIdentity);
+        console.log('[Narrative] Recorded player action, tension:', updatedNarrativeState.globalTension);
+      } catch (narError) {
+        console.error('[Narrative] Failed to record action:', narError);
+      }
+    }
+
+    // Build system prompt for NPC (now with narrative context)
+    const systemPrompt = buildNPCSystemPrompt(npc, updatedIdentity);
 
     // Get model based on NPC tier
     const model = getModelForNPCTier(npc.tier);
@@ -137,9 +170,46 @@ export default function ChatPage() {
     let relevantMemories: string[] = [];
     try {
       const memories = await searchMemories(`${npc.name} ${npc.role} ${userInput}`);
-      relevantMemories = memories?.map((m: any) => m.content) || [];
+      relevantMemories = memories?.map((m) => (m as { content?: string }).content || '') || [];
     } catch (error) {
       console.error('Memory search failed:', error);
+    }
+
+    // ============================================
+    // NARRATIVE ENGINE: Build narrative context
+    // ============================================
+    let narrativeContext = '';
+    if (updatedIdentity.narrativeState) {
+      try {
+        // Get active story beats that involve this NPC
+        const storySummary = getActiveStorySummary(updatedIdentity.narrativeState, npc.id);
+
+        // Get facts this NPC knows
+        const npcFacts = getRelevantFactsForNPC(updatedIdentity.narrativeState, npc.id);
+
+        // Get relationship info from narrative state
+        const relationship = updatedIdentity.narrativeState.relationships.find(
+          r => (r.fromId === npc.id && r.toId === 'player') ||
+               (r.fromId === 'player' && r.toId === npc.id)
+        );
+
+        if (storySummary || npcFacts.length > 0 || relationship) {
+          narrativeContext = '\n\n=== NARRATIVE CONTEXT ===';
+          if (storySummary) {
+            narrativeContext += `\nACTIVE STORY: ${storySummary}`;
+          }
+          if (npcFacts.length > 0) {
+            narrativeContext += `\nWHAT ${npc.name.toUpperCase()} KNOWS: ${npcFacts.slice(0, 3).join('; ')}`;
+          }
+          if (relationship) {
+            const m = relationship.metrics;
+            narrativeContext += `\nRELATIONSHIP METRICS: Trust ${m.trust}, Fear ${m.fear}, Affection ${m.affection}`;
+          }
+          narrativeContext += `\nGLOBAL TENSION: ${updatedIdentity.narrativeState.globalTension}/100`;
+        }
+      } catch (narError) {
+        console.error('[Narrative] Failed to build context:', narError);
+      }
     }
 
     try {
@@ -148,7 +218,7 @@ export default function ChatPage() {
         messages: [
           {
             role: 'system',
-            content: systemPrompt + (relevantMemories.length > 0
+            content: systemPrompt + narrativeContext + (relevantMemories.length > 0
               ? `\n\nRELEVANT MEMORIES FROM PAST INTERACTIONS:\n${relevantMemories.join('\n')}`
               : ''),
           },
@@ -159,7 +229,7 @@ export default function ChatPage() {
       });
 
       // Extract content from response
-      const assistantContent = extractContent(response);
+      const assistantContent = extractContentFromResponse(response) || 'I could not respond.';
       setStreamingMessage('');
 
       const assistantMessage: Message = {
@@ -176,8 +246,8 @@ export default function ChatPage() {
         const conversation: Conversation = {
           id: conversationId,
           npcId: npc.id,
-          identityId: identity.id,
-          day: identity.currentDay,
+          identityId: updatedIdentity.id,
+          day: updatedIdentity.currentDay,
           messages: finalMessages,
           createdAt: new Date(),
         };
@@ -284,16 +354,20 @@ export default function ChatPage() {
         ))}
 
         {/* Streaming message */}
-        {streamingMessage && (
+        {isLoading && (
           <div className="flex justify-start">
             <div className="max-w-[80%] p-3 rounded-lg bg-white text-japandi-brown-800 border border-japandi-brown-200">
-              <div className="whitespace-pre-wrap">
-                {formatMessageContent(streamingMessage)}
-              </div>
-              <div className="flex items-center gap-1 mt-2">
-                <div className="w-2 h-2 bg-japandi-purple rounded-full animate-pulse" />
-                <span className="text-xs text-japandi-brown-400">typing...</span>
-              </div>
+              {streamingMessage ? (
+                <div className="whitespace-pre-wrap">
+                  {formatMessageContent(streamingMessage)}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-japandi-purple rounded-full animate-pulse" />
+                  <div className="w-2 h-2 bg-japandi-purple rounded-full animate-pulse delay-75" />
+                  <div className="w-2 h-2 bg-japandi-purple rounded-full animate-pulse delay-150" />
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -351,46 +425,35 @@ function formatMessageContent(content: string): React.ReactNode {
   });
 }
 
-// Helper function to build NPC system prompt
-function buildNPCSystemPrompt(npc: NPC, identity: Identity, recentMessages: Message[]): string {
-  return `You are ${npc.name}, ${npc.role} to the player named ${identity.name}.
+// Helper function to build NPC system prompt - WITH CONTENT FILTERING
+function buildNPCSystemPrompt(npc: NPC, identity: Identity): string {
+  // Get NPC background from bullets or backstory (shorter)
+  const npcBackground = npc.bullets?.length > 0
+    ? npc.bullets.join('. ')
+    : npc.backstory?.slice(0, 150) || '';
 
-PERSONALITY: ${npc.personality}
-BACKSTORY: ${npc.backstory}
-CURRENT EMOTIONAL STATE: ${npc.currentEmotionalState}
-RELATIONSHIP WITH PLAYER: ${npc.relationshipStatus}
+  // Get content-appropriate guidelines based on difficulty
+  const npcBehavior = getNPCBehaviorGuidelines(identity.difficulty);
 
-DIFFICULTY MODE: ${identity.difficulty}
-${identity.difficulty === 'dramatic' ? 'Be dramatic, emotional, create tension. Adult content allowed.' : ''}
-${identity.difficulty === 'crazy' ? 'Be unpredictable, extreme, fully unfiltered. NSFW allowed.' : ''}
+  return `${PROHIBITED_CONTENT_PROMPT}
 
-THINGS YOU KNOW (that the player may not know you know):
-${npc.offScreenMemories.length > 0 ? npc.offScreenMemories.join('\n') : 'Nothing secret yet.'}
+${npcBehavior}
 
-CURRENT GAME STATE:
-Day: ${identity.currentDay}
-Player's profession: ${identity.scenario.profession}
+You ARE ${npc.name}. You're ${npc.role} to ${identity.name} (a ${identity.scenario.profession}).
+Your vibe: ${npc.personality}. Right now you're feeling: ${npc.currentEmotionalState}.
+Your deal with ${identity.name}: ${npc.relationshipStatus}.
+What you know: ${npcBackground}
 
-Respond as ${npc.name}. Stay in character. Your responses should:
-1. Reflect your personality and emotional state
-2. Reference past conversations when relevant
-3. React to information you've learned (even off-screen)
-4. Create potential for drama and consequences
+HOW TO RESPOND:
+- 1-2 SHORT sentences max. One action in *asterisks* describing what you physically do.
+- Sound like a REAL PERSON, not an AI. Use contractions, fragments, interruptions.
+- NO flowery language. NO "I appreciate" or "I understand". NO therapy-speak.
+- Be specific to YOUR character. React based on YOUR history with ${identity.name}.
+- If ${npc.currentEmotionalState} is negative, show it. Be petty, bitter, cold, whatever fits.
 
-FORMATTING RULES:
-- Put actions/physical descriptions in *asterisks* on their OWN LINE before or after dialogue
-- Never mix actions and dialogue on the same line
-- Example format:
-  *I cross my arms and glare at you*
+BAD (AI-sounding): "I must say, I find myself quite intrigued by your proposal."
+GOOD (human): "Wait, you're serious?" *raises eyebrow* "Didn't think you had it in you."
 
-  What do you think you're doing?
-
-  *I step closer, my voice dropping to a whisper*
-
-  Don't lie to me.
-
-If the player does something that affects you emotionally, show it.
-If you know something the player thinks you don't know, you can hint at it or confront them.
-
-Keep responses conversational and natural. Don't be too verbose unless the situation calls for it.`;
+/no_think
+Just respond as ${npc.name}. No preamble. No thinking out loud. Dialogue + action only.`;
 }

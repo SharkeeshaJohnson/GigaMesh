@@ -1,6 +1,6 @@
 'use client';
 
-import { useChat as useReverbiaChat, useMemory as useReverbiaMemory } from '@reverbia/sdk/react';
+import { useChat as useReverbiaChat, useMemory as useReverbiaMemory, useModels as useReverbiaModels } from '@reverbia/sdk/react';
 import { useIdentityToken } from '@privy-io/react-auth';
 import { MODEL_CONFIG } from './models';
 
@@ -60,3 +60,13 @@ export function useMemory() {
 
 // Re-export encryption utilities
 export { useEncryption, encryptData, decryptData } from '@reverbia/sdk/react';
+
+// Export useModels to discover available models
+export function useModels() {
+  const { identityToken } = useIdentityToken();
+
+  return useReverbiaModels({
+    getToken: async () => identityToken || null,
+    apiUrl: API_URL,
+  } as any);
+}
