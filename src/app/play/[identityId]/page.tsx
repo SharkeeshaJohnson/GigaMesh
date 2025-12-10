@@ -164,6 +164,44 @@ export default function GamePage() {
     return clean;
   };
 
+  // Detect garbage/code output from models that went off the rails
+  const isGarbageResponse = (content: string): boolean => {
+    // Check for code patterns
+    const codePatterns = [
+      /#include\s*</, // C/C++ includes
+      /^import\s+\w+/, // Python/JS imports
+      /function\s+\w+\s*\(/, // Function definitions
+      /\bvoid\s+\w+\s*\(/, // C void functions
+      /\bint\s+\w+\s*\(/, // C int functions
+      /\bchar\s*\*/, // C char pointers
+      /^\s*{[\s\S]*}[\s;]*$/, // JSON-like blocks
+      /\bprintf\s*\(/, // printf calls
+      /\bstrcpy\s*\(/, // strcpy calls
+      /\bfopen\s*\(/, // file operations
+      /\breturn\s+0x/, // hex returns
+      /^\s*<\?php/, // PHP
+      /^\s*<!DOCTYPE/, // HTML
+      /^\s*<html/i, // HTML
+    ];
+
+    for (const pattern of codePatterns) {
+      if (pattern.test(content)) {
+        console.warn('[Garbage Detection] Code pattern detected:', pattern.toString());
+        return true;
+      }
+    }
+
+    // Check for high density of programming symbols
+    const codeSymbols = (content.match(/[{};\[\]<>()=&|!]/g) || []).length;
+    const wordCount = content.split(/\s+/).length;
+    if (wordCount > 5 && codeSymbols / wordCount > 0.5) {
+      console.warn('[Garbage Detection] High code symbol density:', codeSymbols / wordCount);
+      return true;
+    }
+
+    return false;
+  };
+
   // Helper to extract content from API response
   const extractContent = (response: any): string => {
     let content = '';
@@ -328,32 +366,46 @@ export default function GamePage() {
   }, [authenticated, identityId, router]);
 
   // Assign diverse models to NPCs when models list becomes available
+  // ALWAYS reassign to ensure variety (don't preserve old assignments)
   useEffect(() => {
     async function assignNPCModels() {
       if (!identity || !models || models.length === 0) return;
 
-      const npcsNeedingModels = identity.npcs.filter((npc: NPC) => !npc.assignedModel);
-      if (npcsNeedingModels.length === 0) return;
-
       const availableModels = filterAvailableModels(models as any);
-      const assignments = assignModelsToNPCs(identity.npcs, availableModels);
+      console.log('[Models] Available models:', availableModels.map(m => m.split('/').pop()));
 
-      let needsUpdate = false;
-      const updatedNpcs = identity.npcs.map((npc: NPC) => {
-        const assignedModel = assignments.get(npc.id);
-        if (assignedModel && !npc.assignedModel) {
-          needsUpdate = true;
-          return { ...npc, assignedModel };
+      // If we only have 1-2 models, skip reassignment (no variety possible)
+      if (availableModels.length <= 2) {
+        console.log('[Models] Not enough model variety, using tier-based defaults');
+        return;
+      }
+
+      // Create deterministic but diverse assignments based on NPC index
+      // This ensures variety while being stable across reloads
+      const updatedNpcs = identity.npcs.map((npc: NPC, index: number) => {
+        // Use modulo to cycle through available models
+        const modelIndex = index % availableModels.length;
+        const newModel = availableModels[modelIndex];
+
+        // Only update if different to avoid unnecessary saves
+        if (npc.assignedModel !== newModel) {
+          return { ...npc, assignedModel: newModel };
         }
         return npc;
       });
 
-      if (needsUpdate) {
+      // Check if any changes were made
+      const hasChanges = updatedNpcs.some((npc, i) => npc.assignedModel !== identity.npcs[i].assignedModel);
+
+      if (hasChanges) {
         const updatedIdentity = { ...identity, npcs: updatedNpcs };
         setIdentity(updatedIdentity);
         await saveToIndexedDB('identities', updatedIdentity);
         console.log(`[Models] Assigned diverse models to NPCs:`,
           updatedNpcs.map((n: NPC) => `${n.name}: ${n.assignedModel?.split('/').pop()}`).join(', '));
+      } else {
+        console.log(`[Models] NPCs already have diverse models:`,
+          identity.npcs.map((n: NPC) => `${n.name}: ${n.assignedModel?.split('/').pop()}`).join(', '));
       }
     }
 
@@ -496,6 +548,9 @@ export default function GamePage() {
     // If we deleted the current conversation, switch to the default
     if (conversationId === convId) {
       const defaultConvId = `group-${identityId}`;
+      // Clear any pending response state when switching conversations
+      setIsResponding(false);
+      setSelectedNpc(null);
       setConversationId(defaultConvId);
       // Load default conversation messages
       getFromIndexedDB('conversations', defaultConvId).then((loaded) => {
@@ -622,6 +677,13 @@ export default function GamePage() {
           continue;
         }
 
+        // Check for garbage/code output (model went off the rails)
+        if (isGarbageResponse(assistantContent)) {
+          console.log(`[NPC Response] Attempt ${attempt + 1} returned garbage/code, retrying...`);
+          await new Promise(resolve => setTimeout(resolve, 300));
+          continue;
+        }
+
         // Check for similarity to recent messages
         const similarityCheck = checkResponseSimilarity(assistantContent, recentMessages);
         if (similarityCheck.isSimilar) {
@@ -635,15 +697,44 @@ export default function GamePage() {
         break;
       }
 
-      // If still empty after retries, generate a fallback based on NPC state
+      // If still empty after retries, generate a contextual fallback
       if (!assistantContent || assistantContent === 'I could not respond.') {
-        const fallbacks = [
-          `*${npc.name} seems lost in thought*`,
-          `*${npc.name} looks away, not ready to talk*`,
-          `*${npc.name} hesitates, clearly conflicted*`,
-          `*${npc.name} takes a deep breath but says nothing*`,
-        ];
-        assistantContent = fallbacks[Math.floor(Math.random() * fallbacks.length)];
+        // Get the last message to generate a relevant reaction
+        const lastMsg = recentMessages.length > 0 ? recentMessages[recentMessages.length - 1] : null;
+        const lastSpeaker = lastMsg?.npcName || identity.name;
+
+        // Generate fallbacks based on NPC's emotional state and context
+        const emotionalFallbacks: Record<string, string[]> = {
+          angry: [
+            `*${npc.name} clenches jaw* Don't push me, ${lastSpeaker}.`,
+            `*${npc.name} slams hand on table* You don't get to lecture me.`,
+            `*${npc.name} glares* We're not done here.`,
+          ],
+          suspicious: [
+            `*${npc.name} narrows eyes at ${lastSpeaker}* That's... interesting.`,
+            `*${npc.name} crosses arms* I'm listening. Go on.`,
+            `*${npc.name} studies ${lastSpeaker} carefully* And you expect me to believe that?`,
+          ],
+          scared: [
+            `*${npc.name} shifts nervously* I... I don't know what you're talking about.`,
+            `*${npc.name} backs away slightly* Why are you bringing this up now?`,
+            `*${npc.name}'s voice wavers* Can we talk about something else?`,
+          ],
+          guilty: [
+            `*${npc.name} avoids eye contact* That's not... it wasn't like that.`,
+            `*${npc.name} swallows hard* How much do you actually know?`,
+            `*${npc.name} looks down* I can explain...`,
+          ],
+          default: [
+            `*${npc.name} pauses, processing what ${lastSpeaker} said* Well...`,
+            `*${npc.name} raises an eyebrow at ${lastSpeaker}* Is that so?`,
+            `*${npc.name} takes a breath* There's more to this story.`,
+          ],
+        };
+
+        const emotionKey = npc.currentEmotionalState?.toLowerCase() || 'default';
+        const options = emotionalFallbacks[emotionKey] || emotionalFallbacks.default;
+        assistantContent = options[Math.floor(Math.random() * options.length)];
       }
 
       // Parse for image tags [IMG:description]
@@ -1027,6 +1118,9 @@ export default function GamePage() {
                       <button
                         onClick={() => {
                           if (isEditing) return;
+                          // Clear any pending response state when switching conversations
+                          setIsResponding(false);
+                          setSelectedNpc(null);
                           setConversationId(conv.id);
                           setShowConvMenu(null);
                           // Load this conversation's messages
@@ -1315,6 +1409,9 @@ export default function GamePage() {
                             const defaultConv = allConversations.find(c => c.id === `group-${identityId}`);
                             const otherConvs = allConversations.filter(c => c.id !== `group-${identityId}`);
                             setAllConversations(defaultConv ? [defaultConv, newConv, ...otherConvs] : [newConv, ...allConversations]);
+                            // Clear any pending response state when creating new conversation
+                            setIsResponding(false);
+                            setSelectedNpc(null);
                             setConversationId(newConvId);
                             setMessages([]);
                             setShowNewChatModal(false);
@@ -1709,7 +1806,15 @@ export default function GamePage() {
                           </div>
                           <div>
                             <span className="win95-text" style={{ fontSize: '9px', color: 'var(--win95-text-dim)' }}>BACKGROUND:</span>
-                            <p className="win95-text" style={{ fontSize: '11px' }}>{npc.backstory}</p>
+                            {npc.bullets && npc.bullets.length > 0 ? (
+                              <ul style={{ margin: '2px 0 0 0', paddingLeft: '12px' }}>
+                                {npc.bullets.map((bullet, idx) => (
+                                  <li key={idx} className="win95-text" style={{ fontSize: '11px', marginBottom: '2px' }}>{bullet}</li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="win95-text" style={{ fontSize: '11px' }}>{npc.backstory || 'Unknown'}</p>
+                            )}
                           </div>
                           <div className="grid grid-cols-2 gap-1">
                             <div>
@@ -2402,6 +2507,44 @@ function buildGroupChatPrompt(
     ? 'DRAMATIC mode - heightened emotions, turning points, revelations, tension AND resolution'
     : 'REALISTIC mode - grounded, authentic human emotions and reactions';
 
+  // Extract last message for reaction context
+  const lastMessage = recentMessages.length > 0 ? recentMessages[recentMessages.length - 1] : null;
+  const lastWasRevelation = lastMessage && lastMessage.role === 'assistant' &&
+    (lastMessage.content.includes('$') ||
+     lastMessage.content.includes('stealing') ||
+     lastMessage.content.includes('secret') ||
+     lastMessage.content.includes('discovered') ||
+     lastMessage.content.includes('caught') ||
+     lastMessage.content.includes('found out'));
+
+  // Build "REACT TO THIS" section if the last message contained important info
+  let reactToThisSection = '';
+  if (lastMessage && lastMessage.npcId !== npc.id) {
+    const speakerName = lastMessage.npcName || identity.name;
+    const shortContent = lastMessage.content.slice(0, 150);
+
+    if (lastWasRevelation) {
+      reactToThisSection = `
+╔══════════════════════════════════════════════════════════════════╗
+║              ⚠️  REACT TO THIS REVELATION  ⚠️                     ║
+╚══════════════════════════════════════════════════════════════════╝
+
+${speakerName} just said: "${shortContent}..."
+
+YOUR RESPONSE MUST:
+1. Directly acknowledge what ${speakerName} revealed
+2. Show a SPECIFIC reaction (shock, denial, counter-accusation, fear)
+3. Either confirm, deny, or redirect - but ADDRESS the revelation
+
+DO NOT ignore this and talk about something else!`;
+    } else {
+      reactToThisSection = `
+=== LAST MESSAGE ===
+${speakerName}: "${shortContent.slice(0, 80)}..."
+→ Your response should directly relate to this.`;
+    }
+  }
+
   return `You ARE ${npc.name}. You're ${npc.role} to ${identity.name}.
 Personality: ${npc.personality}
 Emotional state: ${npc.currentEmotionalState}
@@ -2415,21 +2558,28 @@ ${narrativeContext ? `Recent events: ${narrativeContext}` : ''}
 
 ${identity.name}'s situation: ${wealthStatus}, ${mentalStatus}.
 Mode: ${modeDescription}
+${reactToThisSection}
 
 === RESPONSE FORMAT ===
 - 1-2 sentences max. One action in *asterisks*.
 - Sound like a REAL PERSON - contractions, fragments, interruptions.
-- React to what others JUST SAID before adding new information.
+- FIRST react to what was just said, THEN add your own point.
 ${bannedPhrases}
 
-=== FORBIDDEN ===
-- DO NOT make up accusations or secrets you weren't given
-- DO NOT use vague metaphors ("shadows", "strings", "fire")
-- DO NOT say "You think you can play this game?" or similar empty threats
-- DO NOT repeat what someone else just said
+=== FORBIDDEN PHRASES (these will cause your response to be rejected) ===
+- "You think you can play this game?"
+- "I know what you did"
+- "the last person who tried to leave"
+- "I have secrets on everyone"
+- "playing with fire"
+- "You're not the only one with secrets"
+- "a little... blackmail"
+- Vague metaphors ("shadows", "strings", "fire", "cards")
+- Making up accusations you weren't given
+- Repeating what someone else just said
 
 ${revelationPrompt}
 
 /no_think
-Respond as ${npc.name}. Be brief. Be specific. Follow your directive above.`;
+Respond as ${npc.name}. Be brief. Be specific. React to what was just said, then add your point.`;
 }

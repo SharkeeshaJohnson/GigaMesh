@@ -100,4 +100,4 @@ import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
 7. Polish: Animations, tutorial, error handling, performance
 
 ## PRD Reference
-Full PRD located at: `/Users/alex/Desktop/LifeSim-PRD-ClaudeCode-v1.2.md`
+Full PRD located at: `/Users/alex/Desktop/LifeSim-PRD-ClaudeCode-v1.2.md
