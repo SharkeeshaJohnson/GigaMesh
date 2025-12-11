@@ -141,6 +141,326 @@ export const PERSONA_POOLS: Record<ContentRating, PersonaTemplate[]> = {
         'A gatekeeping figure in their field',
       ],
     },
+    {
+      id: 'loyal-friend',
+      type: 'Loyal Friend',
+      traits: ['dependable', 'selfless', 'conflict-avoidant', 'warm'],
+      situations: [
+        'Always putting others first at their own expense',
+        'Caught between two friends in conflict',
+        'Discovering a friend has been taking advantage of them',
+      ],
+      backstoryHints: [
+        'Never learned to say no',
+        'Lost a close friendship that still haunts them',
+        'Secretly wishes someone would put them first for once',
+      ],
+      npcContextHints: [
+        'Friends who rely on them too much',
+        'Someone who sees their worth',
+        'A toxic friend they cannot let go of',
+      ],
+    },
+    {
+      id: 'quiet-achiever',
+      type: 'Quiet Achiever',
+      traits: ['humble', 'overlooked', 'capable', 'patient'],
+      situations: [
+        'Finally getting recognition after years of hard work',
+        'Someone else taking credit for their efforts',
+        'Deciding whether to speak up or stay silent',
+      ],
+      backstoryHints: [
+        'Learned to stay invisible to survive',
+        'Has accomplished more than anyone realizes',
+        'Afraid that attention will bring scrutiny',
+      ],
+      npcContextHints: [
+        'A boss who finally notices them',
+        'A colleague who steals their ideas',
+        'Family who underestimates them',
+      ],
+    },
+    {
+      id: 'reluctant-leader',
+      type: 'Reluctant Leader',
+      traits: ['capable', 'uncertain', 'responsible', 'burdened'],
+      situations: [
+        'Thrust into leadership after someone leaves',
+        'Everyone looking to them for answers',
+        'Questioning if they are the right person for the job',
+      ],
+      backstoryHints: [
+        'Never wanted to be in charge',
+        'Stepped up when no one else would',
+        'Fears making a decision that hurts others',
+      ],
+      npcContextHints: [
+        'People depending on their decisions',
+        'Someone who resents their position',
+        'A mentor figure who believes in them',
+      ],
+    },
+    {
+      id: 'eternal-optimist',
+      type: 'Eternal Optimist',
+      traits: ['hopeful', 'persistent', 'sometimes naive', 'inspiring'],
+      situations: [
+        'Facing setback after setback but refusing to give up',
+        'Others think they are foolish for hoping',
+        'A chance that proves their faith was worth it',
+      ],
+      backstoryHints: [
+        'Survived something that should have broken them',
+        'Chooses hope because the alternative is too painful',
+        'Inspires others even when struggling themselves',
+      ],
+      npcContextHints: [
+        'Cynics who think they are naive',
+        'Someone they inspired without knowing',
+        'A person who tests their optimism',
+      ],
+    },
+    {
+      id: 'protective-sibling',
+      type: 'Protective Sibling',
+      traits: ['fierce', 'loyal', 'overbearing', 'loving'],
+      situations: [
+        'Sibling making choices they disagree with',
+        'Family secrets affecting their relationship',
+        'Having to let their sibling make their own mistakes',
+      ],
+      backstoryHints: [
+        'Took on a parental role too young',
+        'Feels responsible for their sibling happiness',
+        'Struggling to see their sibling as an adult',
+      ],
+      npcContextHints: [
+        'The sibling they are trying to protect',
+        'Parents who enabled the dynamic',
+        'Someone dating their sibling',
+      ],
+    },
+    {
+      id: 'second-chance-seeker',
+      type: 'Second Chance Seeker',
+      traits: ['hopeful', 'nervous', 'determined', 'humble'],
+      situations: [
+        'Starting over after a major life change',
+        'Trying to rebuild relationships they damaged',
+        'Proving they have changed to skeptics',
+      ],
+      backstoryHints: [
+        'Hit rock bottom and climbed back up',
+        'Lost everything and is rebuilding from scratch',
+        'Carrying guilt for past mistakes',
+      ],
+      npcContextHints: [
+        'People who remember the old them',
+        'Someone willing to give them a chance',
+        'A person they wronged seeking closure',
+      ],
+    },
+    {
+      id: 'community-pillar',
+      type: 'Community Pillar',
+      traits: ['respected', 'busy', 'stretched thin', 'generous'],
+      situations: [
+        'Everyone comes to them for help',
+        'Neglecting their own family for the community',
+        'A crisis that tests their resources',
+      ],
+      backstoryHints: [
+        'Built their reputation through years of service',
+        'Cannot say no to anyone in need',
+        'Has never asked for help themselves',
+      ],
+      npcContextHints: [
+        'Family who feels neglected',
+        'Community members who depend on them',
+        'Someone who sees them as a rival',
+      ],
+    },
+    {
+      id: 'late-bloomer',
+      type: 'Late Bloomer',
+      traits: ['discovering', 'excited', 'insecure', 'determined'],
+      situations: [
+        'Finding a passion later in life',
+        'Surrounded by people younger and more experienced',
+        'Proving that it is never too late',
+      ],
+      backstoryHints: [
+        'Spent years doing what was expected',
+        'A chance encounter awakened something dormant',
+        'Fighting against ageism and doubt',
+      ],
+      npcContextHints: [
+        'Younger peers who underestimate them',
+        'Family unsure about their new direction',
+        'A mentor who sees their potential',
+      ],
+    },
+    {
+      id: 'peacemaker',
+      type: 'The Peacemaker',
+      traits: ['diplomatic', 'stressed', 'empathetic', 'avoidant'],
+      situations: [
+        'Caught between feuding family members',
+        'Trying to resolve a workplace conflict',
+        'Their need to keep peace causing them harm',
+      ],
+      backstoryHints: [
+        'Grew up mediating their parents fights',
+        'Terrified of confrontation',
+        'Suppressing their own needs to keep harmony',
+      ],
+      npcContextHints: [
+        'Two people who refuse to compromise',
+        'Someone who pushes them to take sides',
+        'A person who appreciates their efforts',
+      ],
+    },
+    {
+      id: 'overachiever',
+      type: 'The Overachiever',
+      traits: ['driven', 'exhausted', 'perfectionist', 'successful'],
+      situations: [
+        'Burning out from pushing too hard',
+        'Success that feels empty',
+        'Learning that good enough is okay',
+      ],
+      backstoryHints: [
+        'Driven by fear of being seen as a failure',
+        'Achieved everything but feels nothing',
+        'Parents who set impossible standards',
+      ],
+      npcContextHints: [
+        'People intimidated by their success',
+        'Someone who sees past the achievements',
+        'A rival who pushes them harder',
+      ],
+    },
+    {
+      id: 'gentle-soul',
+      type: 'Gentle Soul',
+      traits: ['kind', 'sensitive', 'easily hurt', 'compassionate'],
+      situations: [
+        'World feels too harsh for their nature',
+        'Being taken advantage of for their kindness',
+        'Finding strength they did not know they had',
+      ],
+      backstoryHints: [
+        'Feels things more deeply than others',
+        'Has been told they are too sensitive',
+        'Kindness has been both blessing and curse',
+      ],
+      npcContextHints: [
+        'People who exploit their kindness',
+        'A protector who watches over them',
+        'Someone who teaches them boundaries',
+      ],
+    },
+    {
+      id: 'survivor',
+      type: 'The Survivor',
+      traits: ['resilient', 'guarded', 'resourceful', 'wary'],
+      situations: [
+        'Rebuilding after a difficult experience',
+        'Struggling to trust again',
+        'Past trauma affecting current relationships',
+      ],
+      backstoryHints: [
+        'Endured more than anyone knows',
+        'Built walls to protect themselves',
+        'Stronger than they give themselves credit for',
+      ],
+      npcContextHints: [
+        'Someone patient enough to earn their trust',
+        'People who do not understand their caution',
+        'A person from their difficult past',
+      ],
+    },
+    {
+      id: 'supportive-partner',
+      type: 'Supportive Partner',
+      traits: ['loving', 'patient', 'sometimes forgotten', 'steady'],
+      situations: [
+        'Partner achieving success while they stay home',
+        'Feeling invisible in their own relationship',
+        'Rediscovering their own identity',
+      ],
+      backstoryHints: [
+        'Put their dreams aside for their partner',
+        'Identity wrapped up in being supportive',
+        'Starting to wonder what they want',
+      ],
+      npcContextHints: [
+        'Partner who may not see the imbalance',
+        'Friend who encourages their independence',
+        'Someone who sees them as their own person',
+      ],
+    },
+    {
+      id: 'truth-seeker',
+      type: 'Truth Seeker',
+      traits: ['curious', 'persistent', 'sometimes obsessive', 'honest'],
+      situations: [
+        'Uncovering a family secret',
+        'Investigating something others want buried',
+        'Truth that changes everything they believed',
+      ],
+      backstoryHints: [
+        'Cannot let mysteries go unsolved',
+        'Sense that something important was hidden from them',
+        'Values truth above comfort',
+      ],
+      npcContextHints: [
+        'People hiding things from them',
+        'An ally in their search',
+        'Someone protecting a secret',
+      ],
+    },
+    {
+      id: 'hometown-hero',
+      type: 'Hometown Hero',
+      traits: ['admired', 'pressured', 'nostalgic', 'conflicted'],
+      situations: [
+        'Expected to stay and serve the community',
+        'Dreams that require leaving home',
+        'Living up to an impossible reputation',
+      ],
+      backstoryHints: [
+        'Success came with expectations',
+        'Everyone has a version of them that is not real',
+        'Torn between duty and desire',
+      ],
+      npcContextHints: [
+        'Community that claims ownership of them',
+        'Someone who knows the real them',
+        'A person who resents their success',
+      ],
+    },
+    {
+      id: 'curious-explorer',
+      type: 'Curious Explorer',
+      traits: ['adventurous', 'restless', 'open-minded', 'scattered'],
+      situations: [
+        'Settling down when they want to roam',
+        'Opportunity that requires commitment',
+        'Past catching up with their wandering',
+      ],
+      backstoryHints: [
+        'Never stayed anywhere long enough to get hurt',
+        'Running toward adventure or away from something',
+        'Commitment feels like a cage',
+      ],
+      npcContextHints: [
+        'Someone who wants them to stay',
+        'A fellow wanderer who understands',
+        'Person they left behind',
+      ],
+    },
   ],
 
   'mature': [
@@ -244,6 +564,326 @@ export const PERSONA_POOLS: Record<ContentRating, PersonaTemplate[]> = {
         'Old associates trying to pull them back',
       ],
     },
+    {
+      id: 'bitter-ex',
+      type: 'Bitter Ex',
+      traits: ['resentful', 'suspicious', 'hurt', 'seeking closure'],
+      situations: [
+        'Running into an ex who moved on',
+        'Discovering their ex is engaged to someone new',
+        'Forced to coexist at work or through mutual friends',
+      ],
+      backstoryHints: [
+        'Never got the closure they needed',
+        'Still comparing everyone to their ex',
+        'The breakup changed who they are',
+      ],
+      npcContextHints: [
+        'The ex who still affects them',
+        'New romantic interests they compare unfairly',
+        'Friends tired of hearing about it',
+      ],
+    },
+    {
+      id: 'guilty-parent',
+      type: 'Guilty Parent',
+      traits: ['regretful', 'desperate to connect', 'defensive', 'sad'],
+      situations: [
+        'Adult child wants nothing to do with them',
+        'Trying to make up for years of absence',
+        'Realizing the damage they caused',
+      ],
+      backstoryHints: [
+        'Chose career or another relationship over their child',
+        'Addiction kept them from being present',
+        'Only now understanding what they missed',
+      ],
+      npcContextHints: [
+        'An estranged child',
+        'The other parent who raised their child',
+        'Grandchildren they barely know',
+      ],
+    },
+    {
+      id: 'opportunist',
+      type: 'The Opportunist',
+      traits: ['calculating', 'charming', 'adaptable', 'untrustworthy'],
+      situations: [
+        'Playing multiple angles at once',
+        'A scheme that is getting out of control',
+        'Someone figuring out their game',
+      ],
+      backstoryHints: [
+        'Learned early that the world is transactional',
+        'Uses people without feeling bad about it',
+        'Always has an exit strategy',
+      ],
+      npcContextHints: [
+        'People being used without knowing',
+        'Someone who sees through them',
+        'A mark who is smarter than expected',
+      ],
+    },
+    {
+      id: 'midlife-crisis',
+      type: 'Midlife Crisis',
+      traits: ['impulsive', 'desperate', 'searching', 'reckless'],
+      situations: [
+        'Making drastic changes to feel alive',
+        'Embarrassing their family with new behavior',
+        'Chasing youth in unhealthy ways',
+      ],
+      backstoryHints: [
+        'Woke up one day and did not recognize their life',
+        'Terrified of getting old and having missed out',
+        'Acting out in ways that surprise even themselves',
+      ],
+      npcContextHints: [
+        'Spouse watching them spiral',
+        'Children embarrassed by their behavior',
+        'Enablers who encourage bad choices',
+      ],
+    },
+    {
+      id: 'closeted-truth',
+      type: 'Living a Lie',
+      traits: ['exhausted', 'lonely', 'scared', 'yearning'],
+      situations: [
+        'Hiding their true self from everyone',
+        'Meeting someone who knows the real them',
+        'The lie becoming harder to maintain',
+      ],
+      backstoryHints: [
+        'Constructed an entire life around a false identity',
+        'Terrified of what they would lose if the truth came out',
+        'A moment of authenticity that awakened something',
+      ],
+      npcContextHints: [
+        'People who only know the mask',
+        'Someone who accepts them as they are',
+        'A person who suspects the truth',
+      ],
+    },
+    {
+      id: 'debt-collector',
+      type: 'Debt Collector',
+      traits: ['patient', 'methodical', 'intimidating', 'persistent'],
+      situations: [
+        'Someone owes them something they want back',
+        'Willing to wait years to get what they are owed',
+        'The debtor trying to escape consequences',
+      ],
+      backstoryHints: [
+        'Was wronged in a way that cannot be forgotten',
+        'Believes in balance and payment',
+        'Has been planning this for a long time',
+      ],
+      npcContextHints: [
+        'The person who owes them',
+        'Allies in their pursuit',
+        'People caught in the crossfire',
+      ],
+    },
+    {
+      id: 'fading-beauty',
+      type: 'Fading Beauty',
+      traits: ['insecure', 'nostalgic', 'competitive', 'vain'],
+      situations: [
+        'No longer getting the attention they used to',
+        'Younger rivals getting what was once theirs',
+        'Redefining their value beyond appearance',
+      ],
+      backstoryHints: [
+        'Identity was built on being attractive',
+        'Never developed other aspects of themselves',
+        'Watching doors close that used to open easily',
+      ],
+      npcContextHints: [
+        'Younger people who get the attention now',
+        'Someone who values them for who they are',
+        'People who only knew them in their prime',
+      ],
+    },
+    {
+      id: 'enabler',
+      type: 'The Enabler',
+      traits: ['codependent', 'loyal to a fault', 'in denial', 'tired'],
+      situations: [
+        'Covering for someone destructive behavior',
+        'Their enabling being called out',
+        'Choosing between loyalty and what is right',
+      ],
+      backstoryHints: [
+        'Believes they are helping when they are hurting',
+        'Cannot separate their identity from the person they enable',
+        'Terrified of what happens if they stop',
+      ],
+      npcContextHints: [
+        'The person they enable',
+        'Others affected by the behavior',
+        'Someone trying to help them see the truth',
+      ],
+    },
+    {
+      id: 'professional-rival',
+      type: 'Professional Rival',
+      traits: ['competitive', 'envious', 'driven', 'obsessive'],
+      situations: [
+        'Constantly compared to a more successful peer',
+        'Opportunity to sabotage or rise above',
+        'The rivalry becoming personal',
+      ],
+      backstoryHints: [
+        'Defined themselves in opposition to their rival',
+        'Cannot enjoy success unless the rival fails',
+        'The rivalry has consumed their life',
+      ],
+      npcContextHints: [
+        'The rival who may not even know the intensity',
+        'People caught between them',
+        'Someone who sees beyond the competition',
+      ],
+    },
+    {
+      id: 'grief-stricken',
+      type: 'Grief Stricken',
+      traits: ['numb', 'searching', 'irritable', 'lost'],
+      situations: [
+        'Processing a devastating loss',
+        'Others expecting them to move on',
+        'Finding meaning after tragedy',
+      ],
+      backstoryHints: [
+        'Lost someone who was their whole world',
+        'Going through the motions but not really living',
+        'Guilty about moments of happiness',
+      ],
+      npcContextHints: [
+        'People who want them to heal faster',
+        'Someone who truly understands loss',
+        'Memories everywhere they look',
+      ],
+    },
+    {
+      id: 'social-climber',
+      type: 'Social Climber',
+      traits: ['ambitious', 'superficial', 'strategic', 'insecure'],
+      situations: [
+        'Using connections to get ahead',
+        'Being exposed as not belonging',
+        'Choosing between status and authenticity',
+      ],
+      backstoryHints: [
+        'Desperate to escape where they came from',
+        'Every relationship is a stepping stone',
+        'Terrified of being revealed as a fraud',
+      ],
+      npcContextHints: [
+        'People being used for access',
+        'Gatekeepers who see through them',
+        'Someone from their past',
+      ],
+    },
+    {
+      id: 'whistleblower',
+      type: 'The Whistleblower',
+      traits: ['principled', 'scared', 'isolated', 'determined'],
+      situations: [
+        'Discovered something wrong and must decide whether to speak up',
+        'Facing retaliation for doing the right thing',
+        'Questioning if the cost was worth it',
+      ],
+      backstoryHints: [
+        'Saw something they cannot unsee',
+        'Believed in the system until they saw it fail',
+        'Lost everything for telling the truth',
+      ],
+      npcContextHints: [
+        'Powerful people who want them silenced',
+        'Supporters who believe in their cause',
+        'Family affected by their choice',
+      ],
+    },
+    {
+      id: 'inheritance-hunter',
+      type: 'Inheritance Hunter',
+      traits: ['patient', 'attentive', 'calculating', 'resentful'],
+      situations: [
+        'Waiting for elderly relatives to pass',
+        'Competition with other family members',
+        'Discovering they might be cut out',
+      ],
+      backstoryHints: [
+        'Feels entitled to what they are waiting for',
+        'Has sacrificed years playing the dutiful relative',
+        'Others getting what they feel they deserve',
+      ],
+      npcContextHints: [
+        'The wealthy relative',
+        'Competing heirs',
+        'Lawyers and advisors with influence',
+      ],
+    },
+    {
+      id: 'workplace-bully',
+      type: 'Workplace Bully',
+      traits: ['insecure', 'aggressive', 'territorial', 'threatened'],
+      situations: [
+        'New person threatening their position',
+        'Being called out for their behavior',
+        'Facing consequences for how they treat others',
+      ],
+      backstoryHints: [
+        'Bullying masks deep insecurity',
+        'Only knows how to maintain power through fear',
+        'Terrified of being exposed as incompetent',
+      ],
+      npcContextHints: [
+        'Victims of their behavior',
+        'Enablers who look the other way',
+        'Someone who finally stands up to them',
+      ],
+    },
+    {
+      id: 'romantic-obsessive',
+      type: 'Romantic Obsessive',
+      traits: ['intense', 'idealistic', 'boundary-blind', 'devoted'],
+      situations: [
+        'Fixated on someone who does not reciprocate',
+        'Love that is becoming concerning',
+        'Crossing lines they do not see as lines',
+      ],
+      backstoryHints: [
+        'Cannot distinguish between love and obsession',
+        'Builds entire fantasies around people',
+        'Has scared others with their intensity',
+      ],
+      npcContextHints: [
+        'Object of their fixation',
+        'People trying to intervene',
+        'Previous targets of their attention',
+      ],
+    },
+    {
+      id: 'returning-veteran',
+      type: 'Returning Veteran',
+      traits: ['changed', 'disconnected', 'hypervigilant', 'struggling'],
+      situations: [
+        'Trying to readjust to civilian life',
+        'Family who does not understand what they experienced',
+        'Past trauma affecting present relationships',
+      ],
+      backstoryHints: [
+        'Came back different and everyone knows it',
+        'Cannot talk about what they saw',
+        'The person they were before feels like a stranger',
+      ],
+      npcContextHints: [
+        'Family trying to reconnect',
+        'Fellow veterans who understand',
+        'People who cannot relate to their experience',
+      ],
+    },
   ],
 
   'unfiltered': [
@@ -345,6 +985,326 @@ export const PERSONA_POOLS: Record<ContentRating, PersonaTemplate[]> = {
         'People on their payroll in various ways',
         'Someone who cannot be bought',
         'Rivals in the same power game',
+      ],
+    },
+    {
+      id: 'cult-leader',
+      type: 'Cult Leader',
+      traits: ['charismatic', 'delusional', 'dangerous', 'magnetic'],
+      situations: [
+        'Building a following of devoted believers',
+        'Outside world closing in on their operation',
+        'Followers beginning to question the vision',
+      ],
+      backstoryHints: [
+        'Believes their own mythology',
+        'Started seeking power and found something darker',
+        'Has created a world where they are god',
+      ],
+      npcContextHints: [
+        'True believers who would do anything',
+        'Someone trying to rescue a follower',
+        'Authorities investigating the group',
+      ],
+    },
+    {
+      id: 'revenge-seeker',
+      type: 'Revenge Seeker',
+      traits: ['patient', 'consumed', 'methodical', 'hollow'],
+      situations: [
+        'Years of planning coming to fruition',
+        'Revenge not bringing the satisfaction expected',
+        'Discovering the target is not who they thought',
+      ],
+      backstoryHints: [
+        'Someone destroyed everything they loved',
+        'Has become the monster they wanted to destroy',
+        'Revenge is all that keeps them alive',
+      ],
+      npcContextHints: [
+        'The target of their revenge',
+        'Collateral damage in their crusade',
+        'Someone who wants them to let go',
+      ],
+    },
+    {
+      id: 'underground-king',
+      type: 'Underground King',
+      traits: ['ruthless', 'strategic', 'feared', 'lonely'],
+      situations: [
+        'Maintaining control through violence and fear',
+        'Law enforcement getting too close',
+        'Rivals making moves against the empire',
+      ],
+      backstoryHints: [
+        'Rose through violence and cunning',
+        'Cannot trust anyone completely',
+        'The throne is a prison',
+      ],
+      npcContextHints: [
+        'Loyal soldiers with their own ambitions',
+        'Law enforcement building a case',
+        'Family caught between two worlds',
+      ],
+    },
+    {
+      id: 'predator',
+      type: 'The Predator',
+      traits: ['patient', 'charming', 'calculated', 'empty'],
+      situations: [
+        'Grooming a new target',
+        'Past victims coming forward',
+        'Network of enablers being exposed',
+      ],
+      backstoryHints: [
+        'Seeks power through exploitation',
+        'Has perfected the art of gaining trust',
+        'Protected by position or connections',
+      ],
+      npcContextHints: [
+        'Current and past victims',
+        'People who enabled the behavior',
+        'Someone finally fighting back',
+      ],
+    },
+    {
+      id: 'fallen-angel',
+      type: 'Fallen Angel',
+      traits: ['once-good', 'corrupted', 'tragic', 'dangerous'],
+      situations: [
+        'Corruption becoming complete',
+        'Glimpses of who they used to be',
+        'Someone from their past trying to save them',
+      ],
+      backstoryHints: [
+        'Was once a genuinely good person',
+        'Compromise by compromise became this',
+        'Part of them knows what they have become',
+      ],
+      npcContextHints: [
+        'People who remember who they were',
+        'Those corrupted alongside them',
+        'Someone trying to bring back the old them',
+      ],
+    },
+    {
+      id: 'chaos-agent',
+      type: 'Chaos Agent',
+      traits: ['unpredictable', 'anarchic', 'magnetic', 'destructive'],
+      situations: [
+        'Burning down everything they touch',
+        'Attracting followers to their chaos',
+        'The destruction finally hitting home',
+      ],
+      backstoryHints: [
+        'Believes destruction is the only truth',
+        'Found freedom in abandoning all rules',
+        'Wants to watch the world burn',
+      ],
+      npcContextHints: [
+        'People drawn to their energy',
+        'Victims of their destruction',
+        'Someone who thinks they can tame them',
+      ],
+    },
+    {
+      id: 'golden-child',
+      type: 'Golden Child',
+      traits: ['entitled', 'charming', 'secretly broken', 'reckless'],
+      situations: [
+        'Privilege no longer protecting them',
+        'Scandals threatening the family name',
+        'Actually facing consequences for the first time',
+      ],
+      backstoryHints: [
+        'Given everything except boundaries',
+        'Believes rules apply to other people',
+        'Emptiness behind the perfect facade',
+      ],
+      npcContextHints: [
+        'Family cleaning up their messes',
+        'People they have hurt along the way',
+        'Someone who sees through the privilege',
+      ],
+    },
+    {
+      id: 'trafficker',
+      type: 'The Trafficker',
+      traits: ['businesslike', 'amoral', 'efficient', 'paranoid'],
+      situations: [
+        'Moving something valuable and illegal',
+        'A shipment gone wrong',
+        'Betrayal within the organization',
+      ],
+      backstoryHints: [
+        'Treats human misery as a business',
+        'Has compartmentalized all empathy',
+        'In too deep to ever get out',
+      ],
+      npcContextHints: [
+        'People being exploited',
+        'Competitors in the same trade',
+        'Someone trying to bring down the operation',
+      ],
+    },
+    {
+      id: 'black-widow',
+      type: 'Black Widow',
+      traits: ['seductive', 'patient', 'deadly', 'strategic'],
+      situations: [
+        'Another target in their sights',
+        'Pattern being discovered',
+        'Actual feelings complicating the plan',
+      ],
+      backstoryHints: [
+        'Uses intimacy as a weapon',
+        'Has eliminated multiple partners',
+        'Cannot tell if they feel anything anymore',
+      ],
+      npcContextHints: [
+        'Current and former targets',
+        'Someone investigating the pattern',
+        'A potential victim who is different',
+      ],
+    },
+    {
+      id: 'dealer-of-vice',
+      type: 'Dealer of Vice',
+      traits: ['connected', 'slick', 'corruptive', 'indispensable'],
+      situations: [
+        'Supplying the needs of powerful people',
+        'A client becoming a liability',
+        'Competition moving into territory',
+      ],
+      backstoryHints: [
+        'Knows everyone secrets',
+        'Makes a living off weakness',
+        'Has built an empire on discretion',
+      ],
+      npcContextHints: [
+        'Clients who need what they provide',
+        'People destroyed by their services',
+        'Law enforcement trying to build a case',
+      ],
+    },
+    {
+      id: 'trophy-hunter',
+      type: 'Trophy Hunter',
+      traits: ['conquesting', 'competitive', 'shallow', 'insatiable'],
+      situations: [
+        'Pursuing someone as a conquest',
+        'Competition with peers over targets',
+        'A conquest turning the tables',
+      ],
+      backstoryHints: [
+        'Measures worth in conquests',
+        'Discards people after achieving goals',
+        'Deep emptiness driving the behavior',
+      ],
+      npcContextHints: [
+        'People treated as trophies',
+        'Fellow competitors',
+        'Someone who refuses to be conquered',
+      ],
+    },
+    {
+      id: 'dirty-cop',
+      type: 'Dirty Cop',
+      traits: ['corrupted', 'dangerous', 'protected', 'conflicted'],
+      situations: [
+        'In too deep with criminals',
+        'Internal affairs getting close',
+        'A case that tests remaining conscience',
+      ],
+      backstoryHints: [
+        'Started small and got sucked in',
+        'Justifies everything as survival',
+        'Badge makes them untouchable until it does not',
+      ],
+      npcContextHints: [
+        'Criminals they work with',
+        'Honest cops who suspect',
+        'Victims of their corruption',
+      ],
+    },
+    {
+      id: 'sadist',
+      type: 'The Sadist',
+      traits: ['controlled', 'patient', 'cruel', 'sophisticated'],
+      situations: [
+        'Found someone who brings out the worst',
+        'Escalating behaviors',
+        'A victim who fights back',
+      ],
+      backstoryHints: [
+        'Derives pleasure from others pain',
+        'Has perfected appearing normal',
+        'Always searching for the next thrill',
+      ],
+      npcContextHints: [
+        'Past and current victims',
+        'People who enable or ignore',
+        'Someone who finally sees the truth',
+      ],
+    },
+    {
+      id: 'scorned-spouse',
+      type: 'Scorned Spouse',
+      traits: ['vengeful', 'strategic', 'wounded', 'dangerous'],
+      situations: [
+        'Discovered betrayal and planning revenge',
+        'Willing to destroy everything',
+        'Children caught in the crossfire',
+      ],
+      backstoryHints: [
+        'Gave everything to the relationship',
+        'Betrayal shattered their world',
+        'Revenge is all they have left',
+      ],
+      npcContextHints: [
+        'The cheating spouse',
+        'The other person',
+        'Family affected by the fallout',
+      ],
+    },
+    {
+      id: 'puppet-master',
+      type: 'Puppet Master',
+      traits: ['invisible', 'patient', 'brilliant', 'controlling'],
+      situations: [
+        'Pulling strings from behind the scenes',
+        'A puppet becoming aware',
+        'Another player entering the game',
+      ],
+      backstoryHints: [
+        'Prefers to control without being seen',
+        'Has spent years positioning pieces',
+        'Victory means nothing if others know',
+      ],
+      npcContextHints: [
+        'People being manipulated unknowingly',
+        'A puppet who is waking up',
+        'A rival manipulator',
+      ],
+    },
+    {
+      id: 'zealot',
+      type: 'The Zealot',
+      traits: ['fanatical', 'righteous', 'dangerous', 'devoted'],
+      situations: [
+        'Willing to do terrible things for the cause',
+        'The cause demanding more extreme actions',
+        'Questioning the leadership or mission',
+      ],
+      backstoryHints: [
+        'Found meaning in absolute devotion',
+        'Believes the ends justify any means',
+        'Has given up everything for the cause',
+      ],
+      npcContextHints: [
+        'Fellow believers',
+        'Targets of their righteous anger',
+        'Someone trying to deprogram them',
       ],
     },
   ],
@@ -538,6 +1498,51 @@ export function selectRandomPersona(rating: ContentRating): PersonaTemplate {
 }
 
 /**
+ * Select multiple unique random personas for a given count
+ * Ensures no repeating personas until all are used, then cycles with variations
+ */
+export function selectUniquePersonas(rating: ContentRating, count: number): PersonaTemplate[] {
+  const pool = [...PERSONA_POOLS[rating]];
+  const selected: PersonaTemplate[] = [];
+
+  // Shuffle the pool
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+
+  // First pass: use each persona once
+  for (let i = 0; i < Math.min(count, pool.length); i++) {
+    selected.push(pool[i]);
+  }
+
+  // If we need more personas than the pool has, cycle through with randomized backstory hints
+  while (selected.length < count) {
+    // Reshuffle for the next round
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+
+    for (let i = 0; i < pool.length && selected.length < count; i++) {
+      // Create a variation with a different backstory hint
+      const base = pool[i];
+      const hintIndex = Math.floor(Math.random() * base.backstoryHints.length);
+      selected.push({
+        ...base,
+        id: `${base.id}-${selected.length}`,
+        backstoryHints: [
+          base.backstoryHints[hintIndex],
+          ...base.backstoryHints.filter((_, idx) => idx !== hintIndex),
+        ],
+      });
+    }
+  }
+
+  return selected;
+}
+
+/**
  * Select random NPC archetypes based on content rating
  */
 export function selectRandomNPCArchetypes(
@@ -592,4 +1597,243 @@ Role: ${role}
 Traits: ${archetype.traits.join(', ')}
 Secret: ${secret}
 `;
+}
+
+/**
+ * Stat modifiers based on persona traits
+ * Maps traits to stat influences (positive or negative)
+ */
+const TRAIT_STAT_MODIFIERS: Record<string, Partial<Record<'family' | 'career' | 'wealth' | 'mental' | 'reputation', number>>> = {
+  // Positive career/wealth traits
+  'hardworking': { career: 15, wealth: 10 },
+  'competitive': { career: 10, mental: -5 },
+  'driven': { career: 15, family: -10 },
+  'ambitious': { career: 20, wealth: 10, family: -5 },
+  'successful': { career: 25, wealth: 20, reputation: 15 },
+  'capable': { career: 10, reputation: 5 },
+  'strategic': { career: 15, wealth: 10 },
+  'efficient': { career: 10, wealth: 5 },
+  'resourceful': { career: 5, wealth: 5 },
+  'talented': { career: 10, reputation: 10 },
+
+  // Positive family traits
+  'nurturing': { family: 20, mental: 5 },
+  'protective': { family: 15 },
+  'loving': { family: 20, mental: 10 },
+  'loyal': { family: 15, reputation: 5 },
+  'supportive': { family: 15, mental: 5 },
+  'patient': { family: 10, mental: 5 },
+  'empathetic': { family: 10, mental: 5 },
+  'compassionate': { family: 15, mental: 5 },
+  'devoted': { family: 20 },
+  'steady': { family: 10, mental: 10 },
+
+  // Positive mental traits
+  'optimistic': { mental: 20, family: 5 },
+  'hopeful': { mental: 15 },
+  'resilient': { mental: 15 },
+  'calm': { mental: 15 },
+  'balanced': { mental: 20, family: 5 },
+  'inspiring': { mental: 10, reputation: 10 },
+
+  // Positive reputation traits
+  'respected': { reputation: 20, career: 10 },
+  'admired': { reputation: 15 },
+  'generous': { reputation: 10, wealth: -5 },
+  'honest': { reputation: 15 },
+  'charming': { reputation: 10, career: 5 },
+  'magnetic': { reputation: 15 },
+  'charismatic': { reputation: 20 },
+
+  // Negative/challenging traits
+  'perfectionist': { career: 10, mental: -15 },
+  'overbearing': { family: -10 },
+  'sometimes overbearing': { family: -5 },
+  'naive': { wealth: -10, reputation: -5 },
+  'impractical': { wealth: -15, career: -5 },
+  'sensitive': { mental: -10 },
+  'easily hurt': { mental: -15 },
+  'selfless': { wealth: -10, family: 10 },
+  'tired': { mental: -15 },
+  'exhausted': { mental: -20 },
+  'conflict-avoidant': { mental: -5, family: 5 },
+  'avoidant': { mental: -10 },
+  'overlooked': { reputation: -10, career: -5 },
+  'uncertain': { mental: -10 },
+  'burdened': { mental: -15 },
+  'stressed': { mental: -20 },
+  'insecure': { mental: -15, reputation: -5 },
+  'sometimes forgotten': { reputation: -5, family: -5 },
+  'sometimes obsessive': { mental: -10 },
+  'pressured': { mental: -15 },
+  'conflicted': { mental: -10 },
+  'restless': { mental: -10 },
+  'scattered': { career: -5, mental: -5 },
+  'guarded': { family: -10 },
+  'wary': { family: -5, mental: -5 },
+
+  // Negative mental/family traits
+  'nostalgic': { mental: -5 },
+  'questioning': { mental: -10 },
+  'paranoid': { mental: -20, family: -10 },
+  'guilty': { mental: -15 },
+  'compartmentalized': { mental: -10 },
+  'controlled': { mental: -5, family: -5 },
+  'bitter': { mental: -15, family: -10 },
+  'proud': { reputation: 5, family: -5 },
+  'desperate': { mental: -20, wealth: -10 },
+  'rebellious': { reputation: -5, family: -10 },
+  'torn': { mental: -15 },
+  'haunted': { mental: -20 },
+  'trying': { mental: -5 },
+  'defensive': { mental: -10, family: -5 },
+  'vulnerable': { mental: -15 },
+  'resentful': { mental: -15, family: -15 },
+  'suspicious': { mental: -10, family: -10 },
+  'hurt': { mental: -15 },
+  'seeking closure': { mental: -10 },
+  'regretful': { mental: -15 },
+  'desperate to connect': { mental: -10, family: -5 },
+  'sad': { mental: -20 },
+
+  // Morally gray/dark traits
+  'calculating': { wealth: 10, family: -10 },
+  'adaptable': { career: 5 },
+  'untrustworthy': { reputation: -20, family: -15 },
+  'impulsive': { mental: -10, wealth: -15 },
+  'searching': { mental: -10 },
+  'reckless': { wealth: -15, mental: -10 },
+  'lonely': { family: -20, mental: -15 },
+  'yearning': { mental: -10 },
+  'codependent': { family: -10, mental: -15 },
+  'loyal to a fault': { family: 5, mental: -10 },
+  'in denial': { mental: -15 },
+  'envious': { mental: -10 },
+  'obsessive': { mental: -15 },
+  'numb': { mental: -20 },
+  'lost': { mental: -20, career: -10 },
+  'irritable': { family: -10, mental: -10 },
+  'superficial': { reputation: 5, family: -10 },
+  'principled': { reputation: 10, career: -5 },
+  'scared': { mental: -15 },
+  'isolated': { family: -20, mental: -15 },
+  'determined': { career: 10, mental: 5 },
+  'attentive': { family: 5 },
+  'aggressive': { reputation: -10, family: -10 },
+  'territorial': { family: -5 },
+  'threatened': { mental: -15 },
+  'intense': { mental: -5, family: -5 },
+  'idealistic': { mental: 5, wealth: -5 },
+  'boundary-blind': { family: -15, reputation: -10 },
+  'changed': { mental: -15 },
+  'disconnected': { family: -20, mental: -15 },
+  'hypervigilant': { mental: -20 },
+  'struggling': { mental: -15, wealth: -10 },
+
+  // Unfiltered/dark traits
+  'selfish': { family: -20, reputation: -10 },
+  'seductive': { reputation: 5 },
+  'ruthless': { career: 15, family: -20, reputation: -10 },
+  'narcissistic': { mental: -5, family: -15 },
+  'cold': { family: -20 },
+  'morally flexible': { wealth: 10, reputation: -15 },
+  'possessive': { family: -15 },
+  'unstable': { mental: -25 },
+  'dominant': { career: 10, family: -10 },
+  'wealthy': { wealth: 30 },
+  'controlling': { family: -15 },
+  'insatiable': { mental: -15 },
+  'delusional': { mental: -20 },
+  'dangerous': { reputation: -15 },
+  'consumed': { mental: -20 },
+  'methodical': { career: 5 },
+  'hollow': { mental: -25 },
+  'feared': { reputation: -10, career: 10 },
+  'empty': { mental: -25 },
+  'calculated': { career: 10, family: -10 },
+  'once-good': { mental: -10 },
+  'corrupted': { reputation: -20, mental: -15 },
+  'tragic': { mental: -20 },
+  'unpredictable': { mental: -15 },
+  'anarchic': { reputation: -15 },
+  'destructive': { family: -20, wealth: -15 },
+  'entitled': { reputation: -10, family: -5 },
+  'secretly broken': { mental: -20 },
+  'businesslike': { career: 10, family: -10 },
+  'amoral': { reputation: -20 },
+  'deadly': { reputation: -15 },
+  'slick': { reputation: 5, wealth: 10 },
+  'corruptive': { reputation: -15 },
+  'indispensable': { career: 15 },
+  'conquesting': { reputation: -10 },
+  'shallow': { family: -15, mental: -5 },
+  'protected': { reputation: -5, wealth: 10 },
+  'cruel': { family: -20, reputation: -15 },
+  'sophisticated': { wealth: 10, reputation: 5 },
+  'vengeful': { mental: -15, family: -10 },
+  'wounded': { mental: -15 },
+  'invisible': { reputation: -10 },
+  'brilliant': { career: 15 },
+  'fanatical': { mental: -15 },
+  'righteous': { reputation: -5 },
+};
+
+/**
+ * Difficulty modifiers for base stats
+ */
+const DIFFICULTY_BASE_STATS: Record<'realistic' | 'dramatic' | 'crazy', {
+  base: number;
+  variance: number;
+  minFloor: number;
+  maxCeiling: number;
+}> = {
+  // Realistic: Higher base stats, less variance - more stable starting point
+  realistic: { base: 60, variance: 15, minFloor: 40, maxCeiling: 85 },
+  // Dramatic: Medium base stats, higher variance - more drama potential
+  dramatic: { base: 50, variance: 20, minFloor: 25, maxCeiling: 80 },
+  // Crazy: Lower base stats, highest variance - chaotic starting conditions
+  crazy: { base: 40, variance: 30, minFloor: 10, maxCeiling: 90 },
+};
+
+/**
+ * Generate starting stats based on persona traits and difficulty level
+ */
+export function generatePersonaStats(
+  persona: PersonaTemplate,
+  difficulty: 'realistic' | 'dramatic' | 'crazy'
+): { familyHarmony: number; careerStanding: number; wealth: number; mentalHealth: number; reputation: number } {
+  const config = DIFFICULTY_BASE_STATS[difficulty];
+
+  // Start with base values plus random variance
+  const randomVariance = () => Math.floor((Math.random() - 0.5) * 2 * config.variance);
+
+  let family = config.base + randomVariance();
+  let career = config.base + randomVariance();
+  let wealth = config.base + randomVariance();
+  let mental = config.base + randomVariance();
+  let reputation = config.base + randomVariance();
+
+  // Apply trait modifiers
+  for (const trait of persona.traits) {
+    const lowerTrait = trait.toLowerCase();
+    const modifier = TRAIT_STAT_MODIFIERS[lowerTrait];
+    if (modifier) {
+      if (modifier.family) family += modifier.family;
+      if (modifier.career) career += modifier.career;
+      if (modifier.wealth) wealth += modifier.wealth;
+      if (modifier.mental) mental += modifier.mental;
+      if (modifier.reputation) reputation += modifier.reputation;
+    }
+  }
+
+  // Clamp values to valid range
+  const clamp = (val: number) => Math.max(config.minFloor, Math.min(config.maxCeiling, val));
+
+  return {
+    familyHarmony: clamp(family),
+    careerStanding: clamp(career),
+    wealth: clamp(wealth),
+    mentalHealth: clamp(mental),
+    reputation: clamp(reputation),
+  };
 }

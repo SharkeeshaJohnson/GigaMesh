@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
 @import "tailwindcss";
 
 /* ================================================================
@@ -76,7 +75,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-system: 'VT323', monospace;
+  --font-system: 'Consolas', 'Monaco', 'Courier New', monospace;
 }
 
 /* ================================================================
@@ -88,9 +87,9 @@
 }
 
 body {
-  font-family: 'VT323', monospace;
-  font-size: 20px;
-  line-height: 1.3;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 16px;
+  line-height: 1.4;
   margin: 0;
   padding: 0;
   min-height: 100vh;
@@ -102,87 +101,105 @@ img {
 }
 
 /* ================================================================
-   LANDING PAGE STYLES (Dreamy Indie Game)
+   LANDING PAGE STYLES (Windows 95 Style)
    ================================================================ */
 
-.hero {
+.landing-page {
   min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--win95-bg);
+}
+
+.landing-window {
+  width: 100%;
+  max-width: 500px;
+}
+
+.landing-content {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  padding: 24px 16px;
   text-align: center;
-  padding: 48px 24px;
-  position: relative;
-  background: var(--color-background);
-  color: var(--color-text-primary);
 }
 
-.hero::before {
-  content: '';
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-image:
-    radial-gradient(circle at 20% 30%, rgba(166, 130, 255, 0.08) 0%, transparent 50%),
-    radial-gradient(circle at 80% 70%, rgba(88, 135, 255, 0.06) 0%, transparent 50%),
-    radial-gradient(circle at 50% 50%, rgba(113, 90, 255, 0.04) 0%, transparent 70%);
-  pointer-events: none;
-  z-index: 0;
-}
-
-.hero-title {
-  font-family: 'VT323', monospace;
-  font-size: 72px;
-  color: var(--color-text-primary);
-  margin-bottom: 16px;
-  text-shadow:
-    0 4px 8px rgba(166, 130, 255, 0.2),
-    0 2px 0 rgba(113, 90, 255, 0.1);
+.landing-title {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 48px;
+  font-weight: bold;
+  color: var(--win95-text);
+  margin: 0 0 8px 0;
   animation: fade-slide-up 0.6s ease-out;
 }
 
-.hero-subtitle {
-  font-family: 'VT323', monospace;
-  font-size: 24px;
-  color: var(--color-text-secondary);
-  margin-bottom: 48px;
+.landing-cursor {
+  display: inline-block;
+  animation: cursor-blink 1s step-end infinite;
+  color: var(--win95-accent);
+}
+
+.landing-tagline {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 16px;
+  color: var(--win95-text-dim);
+  margin: 0 0 24px 0;
   animation: fade-slide-up 0.6s ease-out 0.2s both;
 }
 
-.hero-sprites {
+/* Horizontal scrolling sprite carousel */
+.landing-sprites-container {
+  width: 100%;
+  overflow: hidden;
+  margin-bottom: 24px;
+  padding: 8px 0;
+  background: white;
+  border: 2px solid;
+  border-color: var(--win95-border-dark) var(--win95-border-light) var(--win95-border-light) var(--win95-border-dark);
+  box-shadow: inset 1px 1px 0 var(--win95-border-darker);
+}
+
+.landing-sprites-carousel {
   display: flex;
-  gap: 24px;
-  margin-bottom: 48px;
+  gap: 16px;
+  animation: scroll-left 20s linear infinite;
+  width: max-content;
+}
+
+.landing-sprite-item {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.landing-sprite-item img {
+  width: 48px;
+  height: 48px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.landing-cta {
   animation: fade-slide-up 0.6s ease-out 0.4s both;
 }
 
-.hero-cta {
-  animation: fade-slide-up 0.6s ease-out 0.6s both;
-}
-
-.particles {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.particle {
-  position: absolute;
-  width: 6px;
-  height: 6px;
-  background: var(--color-primary);
-  border-radius: 50%;
-  opacity: 0.3;
-  animation: sparkle 3s ease-in-out infinite;
+@keyframes scroll-left {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
 }
 
 /* Landing page buttons */
 .btn {
-  font-family: 'VT323', monospace;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 20px;
   display: inline-flex;
   align-items: center;
@@ -268,8 +285,8 @@ img {
   animation: spin 0.8s linear infinite;
 }
 
-.text-body { font-family: 'VT323', monospace; font-size: 18px; }
-.text-small { font-family: 'VT323', monospace; font-size: 14px; color: var(--color-text-secondary); }
+.text-body { font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 18px; }
+.text-small { font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 14px; color: var(--color-text-secondary); }
 .text-muted { color: var(--color-text-muted); }
 
 /* ================================================================
@@ -405,7 +422,7 @@ img {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-family: 'VT323', monospace;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 18px;
   font-weight: bold;
   user-select: none;
@@ -435,7 +452,7 @@ img {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-family: 'VT323', monospace;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 14px;
   color: var(--win95-text);
   padding: 0;
@@ -464,7 +481,7 @@ img {
 
 .win95-menu-item {
   padding: 2px 8px;
-  font-family: 'VT323', monospace;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 18px;
   cursor: pointer;
 }
@@ -496,7 +513,7 @@ img {
 
 /* Buttons */
 .win95-btn {
-  font-family: 'VT323', monospace;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 20px;
   background: var(--win95-surface);
   color: var(--win95-text);
@@ -561,7 +578,7 @@ img {
 
 /* Input Fields */
 .win95-input {
-  font-family: 'VT323', monospace;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 20px;
   background: white;
   color: var(--win95-text);
@@ -577,7 +594,7 @@ img {
 }
 
 .win95-textarea {
-  font-family: 'VT323', monospace;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 20px;
   background: white;
   color: var(--win95-text);
@@ -590,7 +607,7 @@ img {
 }
 
 .win95-select {
-  font-family: 'VT323', monospace;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 20px;
   background: white;
   color: var(--win95-text);
@@ -640,7 +657,7 @@ img {
   left: 10px;
   background: var(--win95-surface);
   padding: 0 6px;
-  font-family: 'VT323', monospace;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 18px;
   color: var(--win95-text);
 }
@@ -660,7 +677,7 @@ img {
 }
 
 .win95-tab {
-  font-family: 'VT323', monospace;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 18px;
   padding: 4px 16px;
   background: var(--win95-mid);
@@ -701,7 +718,7 @@ img {
 
 .win95-listbox-item {
   padding: 2px 6px;
-  font-family: 'VT323', monospace;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 18px;
   cursor: pointer;
 }
@@ -778,7 +795,7 @@ img {
 
 /* Typography */
 .win95-title {
-  font-family: 'VT323', monospace;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 28px;
   font-weight: bold;
   color: var(--win95-text);
@@ -790,13 +807,13 @@ img {
 }
 
 .win95-subtitle {
-  font-family: 'VT323', monospace;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 22px;
   color: var(--win95-text-dim);
 }
 
 .win95-text {
-  font-family: 'VT323', monospace;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 20px;
   color: var(--win95-text);
   line-height: 1.4;
@@ -807,7 +824,7 @@ img {
 }
 
 .win95-label {
-  font-family: 'VT323', monospace;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 18px;
   color: var(--win95-text);
   display: block;
@@ -865,7 +882,7 @@ img {
 }
 
 .win95-stat-label {
-  font-family: 'VT323', monospace;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 16px;
   color: var(--win95-text);
   width: 40px;
@@ -887,7 +904,7 @@ img {
 }
 
 .win95-stat-value {
-  font-family: 'VT323', monospace;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 16px;
   color: var(--win95-text);
   width: 32px;
@@ -911,8 +928,8 @@ img {
 
 /* Scrollbars */
 ::-webkit-scrollbar {
-  width: 18px;
-  height: 18px;
+  width: 9px;
+  height: 9px;
 }
 
 ::-webkit-scrollbar-track {
@@ -921,20 +938,12 @@ img {
 
 ::-webkit-scrollbar-thumb {
   background: var(--win95-surface);
-  border: 2px solid;
+  border: 1px solid;
   border-color: var(--win95-border-light) var(--win95-border-darker) var(--win95-border-darker) var(--win95-border-light);
-  box-shadow:
-    inset 1px 1px 0 var(--win95-lightest),
-    inset -1px -1px 0 var(--win95-border-dark);
 }
 
 ::-webkit-scrollbar-button {
-  background: var(--win95-surface);
-  border: 2px solid;
-  border-color: var(--win95-border-light) var(--win95-border-darker) var(--win95-border-darker) var(--win95-border-light);
-  display: block;
-  height: 18px;
-  width: 18px;
+  display: none;
 }
 
 ::-webkit-scrollbar-corner {
@@ -953,3 +962,504 @@ img {
 .flex-center { align-items: center; justify-content: center; }
 .gap-sm { gap: 8px; }
 .gap-md { gap: 16px; }
+
+/* ================================================================
+   PIXEL ART ICONS (CSS-based)
+   ================================================================ */
+
+/* Base pixel icon container */
+.pixel-icon {
+  display: inline-block;
+  position: relative;
+  image-rendering: pixelated;
+}
+
+/* Checkmark Icon - 12x12 */
+.pixel-icon-check {
+  width: 12px;
+  height: 12px;
+  background: transparent;
+  position: relative;
+}
+.pixel-icon-check::before {
+  content: '';
+  position: absolute;
+  /* Pixel checkmark using box-shadow technique */
+  width: 2px;
+  height: 2px;
+  background: var(--win95-success, #6bcb77);
+  box-shadow:
+    0px 4px 0 var(--win95-success, #6bcb77),
+    2px 6px 0 var(--win95-success, #6bcb77),
+    4px 8px 0 var(--win95-success, #6bcb77),
+    6px 6px 0 var(--win95-success, #6bcb77),
+    8px 4px 0 var(--win95-success, #6bcb77),
+    10px 2px 0 var(--win95-success, #6bcb77);
+}
+
+/* Writing/Pencil Icon - 14x14 */
+.pixel-icon-pencil {
+  width: 14px;
+  height: 14px;
+}
+.pixel-icon-pencil::before {
+  content: '';
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: var(--win95-warning, #ffd93d);
+  box-shadow:
+    /* Pencil tip */
+    0px 12px 0 var(--win95-text, #2d2d3d),
+    2px 10px 0 var(--win95-warning, #ffd93d),
+    4px 8px 0 var(--win95-warning, #ffd93d),
+    6px 6px 0 var(--win95-warning, #ffd93d),
+    8px 4px 0 var(--win95-warning, #ffd93d),
+    10px 2px 0 var(--win95-danger, #ff6b6b),
+    12px 0px 0 var(--win95-danger, #ff6b6b);
+}
+
+/* Sparkle/Star Icon - 14x14 */
+.pixel-icon-sparkle {
+  width: 14px;
+  height: 14px;
+}
+.pixel-icon-sparkle::before {
+  content: '';
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: var(--win95-warning, #ffd93d);
+  box-shadow:
+    /* Center cross */
+    6px 0px 0 var(--win95-warning, #ffd93d),
+    6px 2px 0 var(--win95-warning, #ffd93d),
+    6px 4px 0 var(--win95-warning, #ffd93d),
+    6px 6px 0 #fff,
+    6px 8px 0 var(--win95-warning, #ffd93d),
+    6px 10px 0 var(--win95-warning, #ffd93d),
+    6px 12px 0 var(--win95-warning, #ffd93d),
+    0px 6px 0 var(--win95-warning, #ffd93d),
+    2px 6px 0 var(--win95-warning, #ffd93d),
+    4px 6px 0 var(--win95-warning, #ffd93d),
+    8px 6px 0 var(--win95-warning, #ffd93d),
+    10px 6px 0 var(--win95-warning, #ffd93d),
+    12px 6px 0 var(--win95-warning, #ffd93d),
+    /* Diagonal accents */
+    2px 2px 0 var(--win95-accent, #715aff),
+    10px 2px 0 var(--win95-accent, #715aff),
+    2px 10px 0 var(--win95-accent, #715aff),
+    10px 10px 0 var(--win95-accent, #715aff);
+}
+
+/* Hourglass Icon - 14x18 */
+.pixel-icon-hourglass {
+  width: 14px;
+  height: 18px;
+}
+.pixel-icon-hourglass::before {
+  content: '';
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: var(--win95-warning, #ffd93d);
+  box-shadow:
+    /* Top bar */
+    0px 0px 0 var(--win95-accent, #715aff),
+    2px 0px 0 var(--win95-accent, #715aff),
+    4px 0px 0 var(--win95-accent, #715aff),
+    6px 0px 0 var(--win95-accent, #715aff),
+    8px 0px 0 var(--win95-accent, #715aff),
+    10px 0px 0 var(--win95-accent, #715aff),
+    12px 0px 0 var(--win95-accent, #715aff),
+    /* Top sand */
+    2px 2px 0 var(--win95-warning, #ffd93d),
+    4px 2px 0 var(--win95-warning, #ffd93d),
+    6px 2px 0 var(--win95-warning, #ffd93d),
+    8px 2px 0 var(--win95-warning, #ffd93d),
+    10px 2px 0 var(--win95-warning, #ffd93d),
+    4px 4px 0 var(--win95-warning, #ffd93d),
+    6px 4px 0 var(--win95-warning, #ffd93d),
+    8px 4px 0 var(--win95-warning, #ffd93d),
+    /* Middle neck */
+    6px 6px 0 var(--win95-accent, #715aff),
+    6px 8px 0 var(--win95-warning, #ffd93d),
+    6px 10px 0 var(--win95-accent, #715aff),
+    /* Bottom sand */
+    4px 12px 0 var(--win95-warning, #ffd93d),
+    6px 12px 0 var(--win95-warning, #ffd93d),
+    8px 12px 0 var(--win95-warning, #ffd93d),
+    2px 14px 0 var(--win95-warning, #ffd93d),
+    4px 14px 0 var(--win95-warning, #ffd93d),
+    6px 14px 0 var(--win95-warning, #ffd93d),
+    8px 14px 0 var(--win95-warning, #ffd93d),
+    10px 14px 0 var(--win95-warning, #ffd93d),
+    /* Bottom bar */
+    0px 16px 0 var(--win95-accent, #715aff),
+    2px 16px 0 var(--win95-accent, #715aff),
+    4px 16px 0 var(--win95-accent, #715aff),
+    6px 16px 0 var(--win95-accent, #715aff),
+    8px 16px 0 var(--win95-accent, #715aff),
+    10px 16px 0 var(--win95-accent, #715aff),
+    12px 16px 0 var(--win95-accent, #715aff);
+}
+
+/* House Icon - 14x14 (Family) */
+.pixel-icon-house {
+  width: 14px;
+  height: 14px;
+}
+.pixel-icon-house::before {
+  content: '';
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: var(--win95-danger, #ff6b6b);
+  box-shadow:
+    /* Roof */
+    6px 0px 0 var(--win95-danger, #ff6b6b),
+    4px 2px 0 var(--win95-danger, #ff6b6b),
+    6px 2px 0 var(--win95-danger, #ff6b6b),
+    8px 2px 0 var(--win95-danger, #ff6b6b),
+    2px 4px 0 var(--win95-danger, #ff6b6b),
+    4px 4px 0 var(--win95-danger, #ff6b6b),
+    6px 4px 0 var(--win95-danger, #ff6b6b),
+    8px 4px 0 var(--win95-danger, #ff6b6b),
+    10px 4px 0 var(--win95-danger, #ff6b6b),
+    /* House body */
+    2px 6px 0 var(--win95-warning, #ffd93d),
+    4px 6px 0 var(--win95-warning, #ffd93d),
+    6px 6px 0 var(--win95-warning, #ffd93d),
+    8px 6px 0 var(--win95-warning, #ffd93d),
+    10px 6px 0 var(--win95-warning, #ffd93d),
+    2px 8px 0 var(--win95-warning, #ffd93d),
+    4px 8px 0 var(--win95-info, #5887ff),
+    6px 8px 0 var(--win95-warning, #ffd93d),
+    8px 8px 0 var(--win95-info, #5887ff),
+    10px 8px 0 var(--win95-warning, #ffd93d),
+    2px 10px 0 var(--win95-warning, #ffd93d),
+    4px 10px 0 var(--win95-warning, #ffd93d),
+    6px 10px 0 var(--win95-text, #2d2d3d),
+    8px 10px 0 var(--win95-warning, #ffd93d),
+    10px 10px 0 var(--win95-warning, #ffd93d),
+    2px 12px 0 var(--win95-warning, #ffd93d),
+    4px 12px 0 var(--win95-warning, #ffd93d),
+    6px 12px 0 var(--win95-text, #2d2d3d),
+    8px 12px 0 var(--win95-warning, #ffd93d),
+    10px 12px 0 var(--win95-warning, #ffd93d);
+}
+
+/* Briefcase Icon - 14x12 (Career) */
+.pixel-icon-briefcase {
+  width: 14px;
+  height: 12px;
+}
+.pixel-icon-briefcase::before {
+  content: '';
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: var(--win95-text, #2d2d3d);
+  box-shadow:
+    /* Handle */
+    4px 0px 0 var(--win95-text, #2d2d3d),
+    6px 0px 0 var(--win95-text, #2d2d3d),
+    8px 0px 0 var(--win95-text, #2d2d3d),
+    /* Main body */
+    0px 2px 0 var(--win95-accent, #715aff),
+    2px 2px 0 var(--win95-accent, #715aff),
+    4px 2px 0 var(--win95-text, #2d2d3d),
+    6px 2px 0 var(--win95-accent, #715aff),
+    8px 2px 0 var(--win95-text, #2d2d3d),
+    10px 2px 0 var(--win95-accent, #715aff),
+    12px 2px 0 var(--win95-accent, #715aff),
+    0px 4px 0 var(--win95-accent, #715aff),
+    2px 4px 0 var(--win95-accent, #715aff),
+    4px 4px 0 var(--win95-accent, #715aff),
+    6px 4px 0 var(--win95-warning, #ffd93d),
+    8px 4px 0 var(--win95-accent, #715aff),
+    10px 4px 0 var(--win95-accent, #715aff),
+    12px 4px 0 var(--win95-accent, #715aff),
+    0px 6px 0 var(--win95-accent, #715aff),
+    2px 6px 0 var(--win95-accent, #715aff),
+    4px 6px 0 var(--win95-accent, #715aff),
+    6px 6px 0 var(--win95-accent, #715aff),
+    8px 6px 0 var(--win95-accent, #715aff),
+    10px 6px 0 var(--win95-accent, #715aff),
+    12px 6px 0 var(--win95-accent, #715aff),
+    0px 8px 0 var(--win95-accent, #715aff),
+    2px 8px 0 var(--win95-accent, #715aff),
+    4px 8px 0 var(--win95-accent, #715aff),
+    6px 8px 0 var(--win95-accent, #715aff),
+    8px 8px 0 var(--win95-accent, #715aff),
+    10px 8px 0 var(--win95-accent, #715aff),
+    12px 8px 0 var(--win95-accent, #715aff),
+    0px 10px 0 var(--win95-accent, #715aff),
+    2px 10px 0 var(--win95-accent, #715aff),
+    4px 10px 0 var(--win95-accent, #715aff),
+    6px 10px 0 var(--win95-accent, #715aff),
+    8px 10px 0 var(--win95-accent, #715aff),
+    10px 10px 0 var(--win95-accent, #715aff),
+    12px 10px 0 var(--win95-accent, #715aff);
+}
+
+/* Coin Icon - 12x12 (Wealth) */
+.pixel-icon-coin {
+  width: 12px;
+  height: 12px;
+}
+.pixel-icon-coin::before {
+  content: '';
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: var(--win95-warning, #ffd93d);
+  box-shadow:
+    /* Circle */
+    4px 0px 0 var(--win95-warning, #ffd93d),
+    6px 0px 0 var(--win95-warning, #ffd93d),
+    2px 2px 0 var(--win95-warning, #ffd93d),
+    4px 2px 0 #fff8dc,
+    6px 2px 0 #fff8dc,
+    8px 2px 0 var(--win95-warning, #ffd93d),
+    0px 4px 0 var(--win95-warning, #ffd93d),
+    2px 4px 0 #fff8dc,
+    4px 4px 0 var(--win95-success, #6bcb77),
+    6px 4px 0 var(--win95-success, #6bcb77),
+    8px 4px 0 #fff8dc,
+    10px 4px 0 var(--win95-warning, #ffd93d),
+    0px 6px 0 var(--win95-warning, #ffd93d),
+    2px 6px 0 #fff8dc,
+    4px 6px 0 var(--win95-success, #6bcb77),
+    6px 6px 0 var(--win95-success, #6bcb77),
+    8px 6px 0 #fff8dc,
+    10px 6px 0 var(--win95-warning, #ffd93d),
+    2px 8px 0 var(--win95-warning, #ffd93d),
+    4px 8px 0 #fff8dc,
+    6px 8px 0 #fff8dc,
+    8px 8px 0 var(--win95-warning, #ffd93d),
+    4px 10px 0 var(--win95-warning, #ffd93d),
+    6px 10px 0 var(--win95-warning, #ffd93d);
+}
+
+/* Brain Icon - 14x12 (Mental) */
+.pixel-icon-brain {
+  width: 14px;
+  height: 12px;
+}
+.pixel-icon-brain::before {
+  content: '';
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: var(--win95-accent-light, #a682ff);
+  box-shadow:
+    /* Top bumps */
+    2px 0px 0 var(--win95-accent-light, #a682ff),
+    4px 0px 0 var(--win95-accent-light, #a682ff),
+    8px 0px 0 var(--win95-accent-light, #a682ff),
+    10px 0px 0 var(--win95-accent-light, #a682ff),
+    /* Main body */
+    0px 2px 0 var(--win95-accent-light, #a682ff),
+    2px 2px 0 #d4c8f0,
+    4px 2px 0 #d4c8f0,
+    6px 2px 0 var(--win95-accent-light, #a682ff),
+    8px 2px 0 #d4c8f0,
+    10px 2px 0 #d4c8f0,
+    12px 2px 0 var(--win95-accent-light, #a682ff),
+    0px 4px 0 var(--win95-accent-light, #a682ff),
+    2px 4px 0 #d4c8f0,
+    4px 4px 0 var(--win95-accent, #715aff),
+    6px 4px 0 #d4c8f0,
+    8px 4px 0 var(--win95-accent, #715aff),
+    10px 4px 0 #d4c8f0,
+    12px 4px 0 var(--win95-accent-light, #a682ff),
+    0px 6px 0 var(--win95-accent-light, #a682ff),
+    2px 6px 0 var(--win95-accent, #715aff),
+    4px 6px 0 #d4c8f0,
+    6px 6px 0 var(--win95-accent, #715aff),
+    8px 6px 0 #d4c8f0,
+    10px 6px 0 var(--win95-accent, #715aff),
+    12px 6px 0 var(--win95-accent-light, #a682ff),
+    2px 8px 0 var(--win95-accent-light, #a682ff),
+    4px 8px 0 #d4c8f0,
+    6px 8px 0 #d4c8f0,
+    8px 8px 0 #d4c8f0,
+    10px 8px 0 var(--win95-accent-light, #a682ff),
+    4px 10px 0 var(--win95-accent-light, #a682ff),
+    6px 10px 0 var(--win95-accent-light, #a682ff),
+    8px 10px 0 var(--win95-accent-light, #a682ff);
+}
+
+/* Users/Group Icon - 16x12 (for "Creating characters") */
+.pixel-icon-users {
+  width: 16px;
+  height: 12px;
+}
+.pixel-icon-users::before {
+  content: '';
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: var(--win95-info, #5887ff);
+  box-shadow:
+    /* Left person head */
+    2px 0px 0 var(--win95-info, #5887ff),
+    4px 0px 0 var(--win95-info, #5887ff),
+    2px 2px 0 var(--win95-info, #5887ff),
+    4px 2px 0 var(--win95-info, #5887ff),
+    /* Left person body */
+    0px 4px 0 var(--win95-info, #5887ff),
+    2px 4px 0 var(--win95-info, #5887ff),
+    4px 4px 0 var(--win95-info, #5887ff),
+    6px 4px 0 var(--win95-info, #5887ff),
+    0px 6px 0 var(--win95-info, #5887ff),
+    2px 6px 0 var(--win95-info, #5887ff),
+    4px 6px 0 var(--win95-info, #5887ff),
+    6px 6px 0 var(--win95-info, #5887ff),
+    /* Right person head */
+    10px 0px 0 var(--win95-accent, #715aff),
+    12px 0px 0 var(--win95-accent, #715aff),
+    10px 2px 0 var(--win95-accent, #715aff),
+    12px 2px 0 var(--win95-accent, #715aff),
+    /* Right person body */
+    8px 4px 0 var(--win95-accent, #715aff),
+    10px 4px 0 var(--win95-accent, #715aff),
+    12px 4px 0 var(--win95-accent, #715aff),
+    14px 4px 0 var(--win95-accent, #715aff),
+    8px 6px 0 var(--win95-accent, #715aff),
+    10px 6px 0 var(--win95-accent, #715aff),
+    12px 6px 0 var(--win95-accent, #715aff),
+    14px 6px 0 var(--win95-accent, #715aff);
+}
+
+/* Heart Icon - 14x12 (for "Building relationships") */
+.pixel-icon-heart {
+  width: 14px;
+  height: 12px;
+}
+.pixel-icon-heart::before {
+  content: '';
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: var(--win95-danger, #ff6b6b);
+  box-shadow:
+    /* Top bumps */
+    2px 0px 0 var(--win95-danger, #ff6b6b),
+    4px 0px 0 var(--win95-danger, #ff6b6b),
+    8px 0px 0 var(--win95-danger, #ff6b6b),
+    10px 0px 0 var(--win95-danger, #ff6b6b),
+    0px 2px 0 var(--win95-danger, #ff6b6b),
+    2px 2px 0 #ffaaaa,
+    4px 2px 0 var(--win95-danger, #ff6b6b),
+    6px 2px 0 var(--win95-danger, #ff6b6b),
+    8px 2px 0 var(--win95-danger, #ff6b6b),
+    10px 2px 0 var(--win95-danger, #ff6b6b),
+    12px 2px 0 var(--win95-danger, #ff6b6b),
+    0px 4px 0 var(--win95-danger, #ff6b6b),
+    2px 4px 0 var(--win95-danger, #ff6b6b),
+    4px 4px 0 var(--win95-danger, #ff6b6b),
+    6px 4px 0 var(--win95-danger, #ff6b6b),
+    8px 4px 0 var(--win95-danger, #ff6b6b),
+    10px 4px 0 var(--win95-danger, #ff6b6b),
+    12px 4px 0 var(--win95-danger, #ff6b6b),
+    2px 6px 0 var(--win95-danger, #ff6b6b),
+    4px 6px 0 var(--win95-danger, #ff6b6b),
+    6px 6px 0 var(--win95-danger, #ff6b6b),
+    8px 6px 0 var(--win95-danger, #ff6b6b),
+    10px 6px 0 var(--win95-danger, #ff6b6b),
+    4px 8px 0 var(--win95-danger, #ff6b6b),
+    6px 8px 0 var(--win95-danger, #ff6b6b),
+    8px 8px 0 var(--win95-danger, #ff6b6b),
+    6px 10px 0 var(--win95-danger, #ff6b6b);
+}
+
+/* Globe/World Icon - 12x12 (for "Finalizing world") */
+.pixel-icon-globe {
+  width: 12px;
+  height: 12px;
+}
+.pixel-icon-globe::before {
+  content: '';
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: var(--win95-info, #5887ff);
+  box-shadow:
+    /* Circle outline with continents */
+    4px 0px 0 var(--win95-info, #5887ff),
+    6px 0px 0 var(--win95-info, #5887ff),
+    2px 2px 0 var(--win95-info, #5887ff),
+    4px 2px 0 var(--win95-success, #6bcb77),
+    6px 2px 0 var(--win95-info, #5887ff),
+    8px 2px 0 var(--win95-info, #5887ff),
+    0px 4px 0 var(--win95-info, #5887ff),
+    2px 4px 0 var(--win95-success, #6bcb77),
+    4px 4px 0 var(--win95-success, #6bcb77),
+    6px 4px 0 var(--win95-info, #5887ff),
+    8px 4px 0 var(--win95-info, #5887ff),
+    10px 4px 0 var(--win95-info, #5887ff),
+    0px 6px 0 var(--win95-info, #5887ff),
+    2px 6px 0 var(--win95-info, #5887ff),
+    4px 6px 0 var(--win95-info, #5887ff),
+    6px 6px 0 var(--win95-success, #6bcb77),
+    8px 6px 0 var(--win95-success, #6bcb77),
+    10px 6px 0 var(--win95-info, #5887ff),
+    2px 8px 0 var(--win95-info, #5887ff),
+    4px 8px 0 var(--win95-info, #5887ff),
+    6px 8px 0 var(--win95-success, #6bcb77),
+    8px 8px 0 var(--win95-info, #5887ff),
+    4px 10px 0 var(--win95-info, #5887ff),
+    6px 10px 0 var(--win95-info, #5887ff);
+}
+
+/* Clock Icon - 12x12 (for time/simulation) */
+.pixel-icon-clock {
+  width: 12px;
+  height: 12px;
+}
+.pixel-icon-clock::before {
+  content: '';
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: var(--win95-accent, #715aff);
+  box-shadow:
+    /* Circle */
+    4px 0px 0 var(--win95-accent, #715aff),
+    6px 0px 0 var(--win95-accent, #715aff),
+    2px 2px 0 var(--win95-accent, #715aff),
+    4px 2px 0 #fff,
+    6px 2px 0 #fff,
+    8px 2px 0 var(--win95-accent, #715aff),
+    0px 4px 0 var(--win95-accent, #715aff),
+    2px 4px 0 #fff,
+    4px 4px 0 #fff,
+    6px 4px 0 var(--win95-text, #2d2d3d),
+    8px 4px 0 #fff,
+    10px 4px 0 var(--win95-accent, #715aff),
+    0px 6px 0 var(--win95-accent, #715aff),
+    2px 6px 0 #fff,
+    4px 6px 0 var(--win95-text, #2d2d3d),
+    6px 6px 0 var(--win95-text, #2d2d3d),
+    8px 6px 0 #fff,
+    10px 6px 0 var(--win95-accent, #715aff),
+    2px 8px 0 var(--win95-accent, #715aff),
+    4px 8px 0 #fff,
+    6px 8px 0 #fff,
+    8px 8px 0 var(--win95-accent, #715aff),
+    4px 10px 0 var(--win95-accent, #715aff),
+    6px 10px 0 var(--win95-accent, #715aff);
+}
+
+/* Hourglass animation */
+@keyframes hourglass-flip {
+  0%, 45% { transform: rotate(0deg); }
+  50%, 95% { transform: rotate(180deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.pixel-icon-hourglass-animated {
+  animation: hourglass-flip 2s ease-in-out infinite;
+}

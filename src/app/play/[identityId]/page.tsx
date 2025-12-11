@@ -8,7 +8,7 @@ import { getFromIndexedDB, saveToIndexedDB, getQueuedActions, getConversationsFo
 import { useChat, useMemory, useModels } from '@/lib/reverbia';
 import { MODEL_CONFIG, getModelForNPCTier, getModelForNPC, filterAvailableModels, assignModelsToNPCs } from '@/lib/models';
 import { parseImageTags, inferImageType, generateCharacterConsistentImage } from '@/lib/image-generation';
-import { cacheChatImage, getCachedChatImage } from '@/lib/sprite-cache';
+import { cacheChatImage, getCachedChatImage, getBreathingAnimationFrames, hasBreathingAnimation } from '@/lib/sprite-cache';
 import {
   selectRevelationForNPC,
   buildRevelationPrompt,
@@ -16,6 +16,11 @@ import {
   generateStorySeeds,
   StorySeed,
   RevelationOptions,
+  createNPCActionFact,
+  addWorldFact,
+  getGroupChatRevelations,
+  propagateKnowledge,
+  NarrativeState,
 } from '@/lib/narrative';
 
 // Persona to sprite mapping for migration (matches create page CHARACTER_SPRITES)
@@ -32,6 +37,8 @@ const PERSONA_SPRITE_MAP: Record<string, string> = {
   'black-man': 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/d8159f31-5aa3-463f-a3ca-f982d0bf2ecb/rotations/south.png',
   'black-woman': 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/84b48e89-0ec8-4ead-bfa6-c4a724f8db77/rotations/south.png?t=1765310825626',
   'dominatrix': 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/2d3c6279-716c-4f2d-afa4-2d569d53d553/rotations/south.png?t=1765310825621',
+  'stripper': 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/2d3c6279-716c-4f2d-afa4-2d569d53d553/rotations/south.png?t=1765310825621', // Uses dominatrix sprite
+  'escort': 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/fd3e234f-8a06-4444-a386-0b9ee331cbe1/rotations/south.png', // Uses glamorous woman
   'closeted-bully': 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/76a33b6b-334f-4349-8cb3-41b0eb6dfa5b/rotations/south.png',
   'executive': 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/2e515f86-d60d-4319-bce8-91a3d4014f96/rotations/south.png',
   'influencer': 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/c509c8dd-be00-420b-876b-61764afef9db/rotations/south.png',
@@ -40,6 +47,32 @@ const PERSONA_SPRITE_MAP: Record<string, string> = {
   'startup-founder': 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/a35ea963-d469-4f33-bd8b-2b501380073f/rotations/south.png',
   'trophy-wife': 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/fd3e234f-8a06-4444-a386-0b9ee331cbe1/rotations/south.png',
 };
+
+// CHARACTER_SPRITES array (same as create page) - used for spriteIndex recovery
+const CHARACTER_SPRITES: { spriteUrl: string }[] = [
+  { spriteUrl: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/2dc75f18-f7ea-40e7-8fb0-489f59c3a3a1/rotations/south.png?t=1765310837621' },
+  { spriteUrl: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/8f475f9f-272a-4e29-abab-dbe2be0da067/rotations/south.png?t=1765310837621' },
+  { spriteUrl: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/62c02269-903c-4d4a-a8ec-710cbb195b08/rotations/south.png' },
+  { spriteUrl: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/93aab9ab-3642-43b2-b3b7-6c4c2b66df6d/rotations/south.png?t=1765310837606' },
+  { spriteUrl: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/b66867ae-41a2-40e9-9ded-b931097bdc10/rotations/south.png?t=1765310825629' },
+  { spriteUrl: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/7c0fa009-320f-44d5-a03f-68d24a63c6e7/rotations/south.png?t=1765310825622' },
+  { spriteUrl: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/046f0dc6-9ba6-4e4b-9204-aca8d60d8f3b/rotations/south.png' },
+  { spriteUrl: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/0a8fddc0-7319-4e8f-9c52-5cdcc096f72a/rotations/south.png' },
+  { spriteUrl: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/693033c5-4c49-4dba-b993-6662db2bf5b3/rotations/south.png' },
+  { spriteUrl: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/70a91e3d-0b5a-4547-85ef-0f63f8a045e3/rotations/south.png' },
+  { spriteUrl: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/a911574b-37dc-4e7f-b3b2-40b651c5259e/rotations/south.png?t=1765310837659' },
+  { spriteUrl: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/22a86890-78c7-4cc6-8a90-681b2ce85b6c/rotations/south.png' },
+  { spriteUrl: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/d8159f31-5aa3-463f-a3ca-f982d0bf2ecb/rotations/south.png' },
+  { spriteUrl: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/84b48e89-0ec8-4ead-bfa6-c4a724f8db77/rotations/south.png?t=1765310825626' },
+  { spriteUrl: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/2d3c6279-716c-4f2d-afa4-2d569d53d553/rotations/south.png?t=1765310825621' },
+  { spriteUrl: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/76a33b6b-334f-4349-8cb3-41b0eb6dfa5b/rotations/south.png' },
+  { spriteUrl: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/2e515f86-d60d-4319-bce8-91a3d4014f96/rotations/south.png' },
+  { spriteUrl: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/c509c8dd-be00-420b-876b-61764afef9db/rotations/south.png' },
+  { spriteUrl: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/d1989864-9d7c-4274-9435-ef4a22c930a9/rotations/south.png' },
+  { spriteUrl: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/25eed221-84a2-4fe1-8e5e-8d6293c7b871/rotations/south.png' },
+  { spriteUrl: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/a35ea963-d469-4f33-bd8b-2b501380073f/rotations/south.png' },
+  { spriteUrl: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/fd3e234f-8a06-4444-a386-0b9ee331cbe1/rotations/south.png' },
+];
 
 // NPC sprite pool for random assignment (same as create page)
 const NPC_SPRITE_POOL = [
@@ -76,6 +109,78 @@ interface GroupMessage extends Message {
   isGeneratingImage?: boolean; // True while image is being generated
 }
 
+// Animated sprite component that cycles through PNG frames
+function AnimatedSprite({
+  spriteUrl,
+  alt,
+  className = '',
+  style = {}
+}: {
+  spriteUrl: string;
+  alt: string;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  const [currentFrame, setCurrentFrame] = useState(0);
+  const [frames, setFrames] = useState<string[] | null>(null);
+  const [framesLoaded, setFramesLoaded] = useState(false);
+
+  useEffect(() => {
+    // Check if this sprite has breathing animation frames
+    const animationFrames = getBreathingAnimationFrames(spriteUrl, 'south', 4);
+    if (animationFrames) {
+      setFrames(animationFrames);
+      // Preload all frames
+      let loadedCount = 0;
+      animationFrames.forEach(frameUrl => {
+        const img = new Image();
+        img.onload = () => {
+          loadedCount++;
+          if (loadedCount === animationFrames.length) {
+            setFramesLoaded(true);
+          }
+        };
+        img.onerror = () => {
+          // If any frame fails to load, fall back to static sprite
+          console.log('[AnimatedSprite] Frame failed to load, using static sprite');
+          setFrames(null);
+        };
+        img.src = frameUrl;
+      });
+    }
+  }, [spriteUrl]);
+
+  useEffect(() => {
+    if (!frames || !framesLoaded) return;
+
+    // Animate at ~8 FPS (125ms per frame) for smooth breathing
+    const interval = setInterval(() => {
+      setCurrentFrame(prev => (prev + 1) % frames.length);
+    }, 125);
+
+    return () => clearInterval(interval);
+  }, [frames, framesLoaded]);
+
+  // Use animated frames if available and loaded, otherwise fall back to static sprite
+  const displayUrl = (frames && framesLoaded) ? frames[currentFrame] : spriteUrl;
+
+  return (
+    <img
+      src={displayUrl}
+      alt={alt}
+      className={className}
+      style={{ imageRendering: 'pixelated', ...style }}
+      onError={(e) => {
+        // Fall back to static sprite on error
+        const target = e.target as HTMLImageElement;
+        if (target.src !== spriteUrl) {
+          target.src = spriteUrl;
+        }
+      }}
+    />
+  );
+}
+
 export default function GamePage() {
   const { authenticated, ready } = usePrivy();
   const { identityToken } = useIdentityToken();
@@ -100,7 +205,11 @@ export default function GamePage() {
   const [showHistory, setShowHistory] = useState(false);
 
   // Conversation management
-  const [allConversations, setAllConversations] = useState<{ id: string; title: string; npcIds: string[]; lastMessage?: string; updatedAt: Date; autoConverse?: boolean }[]>([]);
+  const [allConversations, setAllConversations] = useState<{ id: string; title: string; npcIds: string[]; lastMessage?: string; updatedAt: Date; autoConverse?: boolean; autoChatMessageCount?: number }[]>([]);
+  const [showAutoChatNotification, setShowAutoChatNotification] = useState(false);
+  const [showAutoChatComplete, setShowAutoChatComplete] = useState(false);
+  const [autoChatPausedForPlayer, setAutoChatPausedForPlayer] = useState(false); // Pause for player question
+  const [autoChatPauseCount, setAutoChatPauseCount] = useState(0); // Track pauses per session (max 2)
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [selectedChatNpcs, setSelectedChatNpcs] = useState<string[]>([]);
   const [showBackstory, setShowBackstory] = useState(false);
@@ -139,6 +248,17 @@ export default function GamePage() {
   useEffect(() => {
     if (models && models.length > 0) {
       console.log('[Available Models]:', models.map((m: any) => m.id || m.name || m).join('\n'));
+      // Log models that support image generation
+      const imageModels = models.filter((m: any) =>
+        m.supported_methods?.includes('image_generation') ||
+        m.id?.toLowerCase().includes('image') ||
+        m.id?.toLowerCase().includes('flux') ||
+        m.id?.toLowerCase().includes('dall') ||
+        m.id?.toLowerCase().includes('stable')
+      );
+      if (imageModels.length > 0) {
+        console.log('[IMAGE GENERATION MODELS]:', imageModels.map((m: any) => JSON.stringify({ id: m.id, methods: m.supported_methods })));
+      }
       // Find Dobby models
       const dobbyModels = models.filter((m: any) =>
         (m.id || m.name || '').toLowerCase().includes('dobby')
@@ -276,9 +396,16 @@ export default function GamePage() {
         if (loadedIdentity) {
           loadedIdentity.lastPlayedAt = new Date();
 
-          // Migration: Assign player sprite based on persona if missing
-          if (!loadedIdentity.pixelArtUrl && loadedIdentity.persona) {
-            const spriteUrl = PERSONA_SPRITE_MAP[loadedIdentity.persona];
+          // Migration: Recover player sprite from spriteIndex if pixelArtUrl is missing or invalid
+          if (loadedIdentity.spriteIndex !== undefined && loadedIdentity.spriteIndex !== null) {
+            const correctSpriteUrl = CHARACTER_SPRITES[loadedIdentity.spriteIndex]?.spriteUrl;
+            if (correctSpriteUrl && loadedIdentity.pixelArtUrl !== correctSpriteUrl) {
+              console.log(`[Migration] Recovering sprite from spriteIndex ${loadedIdentity.spriteIndex}`);
+              loadedIdentity.pixelArtUrl = correctSpriteUrl;
+            }
+          } else if (!loadedIdentity.pixelArtUrl && loadedIdentity.persona) {
+            // Fallback: Assign sprite based on persona if no spriteIndex
+            const spriteUrl = PERSONA_SPRITE_MAP[loadedIdentity.persona.toLowerCase()];
             if (spriteUrl) {
               loadedIdentity.pixelArtUrl = spriteUrl;
               console.log(`[Migration] Assigned sprite to player based on persona: ${loadedIdentity.persona}`);
@@ -454,14 +581,31 @@ export default function GamePage() {
     saveConversation();
   }, [messages, conversationId, identity]);
 
-  // Auto-conversation effect - NPCs respond to each other
+  // Auto-conversation effect - NPCs respond to each other (capped at 10 messages)
   useEffect(() => {
     // Must have auto-converse enabled and not already responding
     if (!autoConverse || isResponding || !identity || messages.length === 0) return;
 
-    // Get the current conversation's NPC IDs
+    // If paused for player question, don't continue auto-chat
+    if (autoChatPausedForPlayer) return;
+
+    // Get the current conversation's NPC IDs and auto-chat count
     const currentConv = allConversations.find(c => c.id === conversationId);
     const conversationNpcIds = currentConv?.npcIds || identity.npcs.map(n => n.id);
+    const autoChatCount = currentConv?.autoChatMessageCount || 0;
+
+    // Check if we've hit the 10 message cap
+    if (autoChatCount >= 10) {
+      // Auto-stop auto-chat
+      setAllConversations(prev => prev.map(c =>
+        c.id === conversationId
+          ? { ...c, autoConverse: false }
+          : c
+      ));
+      setShowAutoChatComplete(true);
+      setAutoChatPauseCount(0); // Reset pause count for next session
+      return;
+    }
 
     // Need at least 2 NPCs for auto-conversation
     if (conversationNpcIds.length < 2) return;
@@ -483,16 +627,24 @@ export default function GamePage() {
 
     const randomNpc = eligibleNpcs[Math.floor(Math.random() * eligibleNpcs.length)];
 
-    // Set a quick timeout to trigger the response (200-800ms for snappy conversation)
+    // Determine if we should pause for player question
+    // Conditions: message 3-8, max 2 pauses per session, ~70% random chance
+    const shouldPauseForPlayerQuestion =
+      autoChatCount >= 3 &&
+      autoChatCount <= 8 &&
+      autoChatPauseCount < 2 &&
+      Math.random() < 0.70; // 70% chance
+
+    // Set a quick timeout to trigger the response (2-4s for readable conversation pacing)
     const timeout = setTimeout(() => {
-      // Double-check we should still respond
+      // Double-check we should still respond and haven't hit cap
       if (autoConverseRef.current) {
-        handleNpcRespond(randomNpc);
+        handleNpcRespond(randomNpc, true, shouldPauseForPlayerQuestion); // Pass flags
       }
-    }, 2000 + Math.random() * 2000); // 2-4 second delay for readable conversation pacing
+    }, 2000 + Math.random() * 2000);
 
     return () => clearTimeout(timeout);
-  }, [messages, autoConverse, isResponding, identity, allConversations, conversationId]);
+  }, [messages, autoConverse, isResponding, identity, allConversations, conversationId, autoChatPausedForPlayer, autoChatPauseCount]);
 
   // Sync autoConverseRef with current conversation's state
   useEffect(() => {
@@ -590,33 +742,125 @@ export default function GamePage() {
   const handleSendMessage = () => {
     if (!input.trim() || !identity) return;
 
+    const messageContent = input.trim();
+
     const userMessage: GroupMessage = {
       role: 'user',
-      content: input.trim(),
+      content: messageContent,
       timestamp: new Date(),
     };
 
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
+
+    // BUTTERFLY EFFECT: Store player action for NPCs to reference
+    // Only store if message is substantial (more than just a few words)
+    if (messageContent.length > 10) {
+      const currentConv = allConversations.find(c => c.id === conversationId);
+      const convTitle = currentConv?.title || 'conversation';
+      const npcNames = (currentConv?.npcIds || [])
+        .map(id => identity.npcs.find(n => n.id === id)?.name)
+        .filter(Boolean)
+        .join(', ');
+
+      const newAction = {
+        id: crypto.randomUUID(),
+        day: identity.currentDay,
+        content: messageContent.slice(0, 200), // Truncate long messages
+        context: `to ${npcNames || 'NPCs'} in ${convTitle}`,
+        timestamp: new Date(),
+      };
+
+      // Add to identity's playerActions (keep last 20)
+      const updatedActions = [...(identity.playerActions || []).slice(-19), newAction];
+      const updatedIdentity = { ...identity, playerActions: updatedActions };
+      setIdentity(updatedIdentity);
+      saveToIndexedDB('identities', updatedIdentity);
+
+      console.log(`[Butterfly Effect] Stored player action: "${messageContent.slice(0, 50)}..."`);
+    }
+
+    // AUTO-CHAT RESUME: If auto-chat was paused waiting for player, resume it
+    if (autoChatPausedForPlayer) {
+      console.log('[Auto-Chat] Player responded, resuming auto-chat');
+      setAutoChatPausedForPlayer(false);
+    }
   };
 
   // Request NPC to respond (tap on NPC avatar)
-  const handleNpcRespond = async (npc: NPC) => {
+  // isAutoChat flag indicates this is an auto-chat response that should:
+  // 1. Increment the auto-chat message count
+  // 2. Force story progression with dramatic revelations
+  // shouldAskPlayerQuestion flag: NPC should ask the player a direct question (for auto-chat pause)
+  const handleNpcRespond = async (npc: NPC, isAutoChat: boolean = false, shouldAskPlayerQuestion: boolean = false) => {
     if (!identity || isResponding) return;
 
     setIsResponding(true);
     setSelectedNpc(npc);
 
+    // If auto-chat, increment message count
+    if (isAutoChat) {
+      setAllConversations(prev => prev.map(c =>
+        c.id === conversationId
+          ? { ...c, autoChatMessageCount: (c.autoChatMessageCount || 0) + 1 }
+          : c
+      ));
+    }
+
     try {
       // Build context from recent messages - limit to last 6 to reduce tokens
       const recentMessages = messages.slice(-6);
+
+      // Get current conversation info for auto-chat story progression
+      const currentConv = allConversations.find(c => c.id === conversationId);
+      const autoChatCount = (currentConv?.autoChatMessageCount || 0) + (isAutoChat ? 1 : 0);
+      const conversationNpcIds = currentConv?.npcIds || identity.npcs.map(n => n.id);
+      const otherNpcIds = conversationNpcIds.filter(id => id !== npc.id);
 
       // Pass revelation state for coordination
       const revelationState = {
         revealedSeedIds,
         majorRevealedThisRound: lastMajorRevealNpcId !== null && lastMajorRevealNpcId !== npc.id,
       };
-      const systemPrompt = buildGroupChatPrompt(npc, identity, recentMessages, simulationHistory, revelationState);
+
+      // For auto-chat: Force story progression with dramatic revelations
+      let autoChatDirective = '';
+      if (isAutoChat && autoChatCount > 0) {
+        // Determine story beat based on position in 10-message arc
+        if (autoChatCount <= 3) {
+          autoChatDirective = `
+[AUTO-CHAT DIRECTIVE - MESSAGE ${autoChatCount}/10]
+Build tension. Hint at something you know that others don't. Be mysterious or accusatory.
+Drop subtle clues about secrets, past events, or hidden motivations.
+Other characters present: ${otherNpcIds.map(id => identity.npcs.find(n => n.id === id)?.name).filter(Boolean).join(', ')}`;
+        } else if (autoChatCount <= 6) {
+          autoChatDirective = `
+[AUTO-CHAT DIRECTIVE - MESSAGE ${autoChatCount}/10]
+Escalate the drama. Confront someone directly or make a shocking accusation.
+Reveal something significant about yourself or another character.
+This is the rising action - things should get heated.`;
+        } else if (autoChatCount <= 9) {
+          autoChatDirective = `
+[AUTO-CHAT DIRECTIVE - MESSAGE ${autoChatCount}/10]
+MAJOR REVELATION TIME. Drop a bombshell that changes everything.
+Confess a secret, expose a lie, or reveal a hidden truth.
+Be dramatic - this is the climax of this conversation arc.`;
+        } else {
+          autoChatDirective = `
+[AUTO-CHAT DIRECTIVE - MESSAGE ${autoChatCount}/10 - FINAL]
+Conclude this dramatic exchange. React to everything that's been revealed.
+Set up consequences and unresolved tensions for future conversations.
+End on a cliffhanger or dramatic note.`;
+        }
+      }
+
+      // Build system prompt with all options
+      const promptOptions = {
+        isAutoChat,
+        autoChatMessageCount: autoChatCount,
+        shouldAskPlayerQuestion,
+      };
+      const systemPrompt = buildGroupChatPrompt(npc, identity, recentMessages, simulationHistory, revelationState, conversationNpcIds, promptOptions) + autoChatDirective;
 
       // Get model for this NPC (uses assigned model for variety, falls back to tier-based)
       const model = getModelForNPC(npc);
@@ -778,6 +1022,87 @@ export default function GamePage() {
         }
       }
 
+      // CROSS-CONVERSATION MEMORY: Extract facts from auto-chat and store in NPC memory
+      // This allows NPCs to remember what happened in other conversations
+      if (isAutoChat && assistantContent && assistantContent.length > 50) {
+        // Extract dramatic content keywords that indicate important dialogue
+        const dramaticIndicators = [
+          'confess', 'reveal', 'secret', 'truth', 'lie', 'betray', 'love', 'hate',
+          'affair', 'money', 'dead', 'killed', 'pregnant', 'divorce', 'fired',
+          'cheat', 'steal', 'know about', 'told me', 'found out', 'discovered'
+        ];
+
+        const hasDramaticContent = dramaticIndicators.some(indicator =>
+          assistantContent.toLowerCase().includes(indicator)
+        );
+
+        if (hasDramaticContent) {
+          // Create a memory fact for this conversation
+          const conversationTitle = currentConv?.title || 'Private conversation';
+          const otherNpcNames = otherNpcIds
+            .map(id => identity.npcs.find(n => n.id === id)?.name)
+            .filter(Boolean)
+            .join(', ');
+
+          // Store as NPC memory - truncate to key dramatic moment
+          const memoryContent = assistantContent.length > 200
+            ? assistantContent.slice(0, 200) + '...'
+            : assistantContent;
+
+          // Add to each NPC's offscreen memories (they were all present)
+          const updatedNpcs = identity.npcs.map(n => {
+            if (conversationNpcIds.includes(n.id)) {
+              const existingMemories = n.offScreenMemories || [];
+              // Format: "Day X - In [conversation] with [people]: [speaker] said: [content]"
+              const newMemory = `Day ${identity.currentDay} - In "${conversationTitle}" with ${otherNpcNames}: ${npc.name} said: "${memoryContent}"`;
+              return {
+                ...n,
+                offScreenMemories: [...existingMemories.slice(-10), newMemory], // Keep last 10
+              };
+            }
+            return n;
+          });
+
+          // Update identity with new memories
+          const updatedIdentity = { ...identity, npcs: updatedNpcs };
+          setIdentity(updatedIdentity);
+          saveToIndexedDB('identities', updatedIdentity);
+
+          console.log(`[Cross-Memory] Stored dramatic moment from ${npc.name} in ${conversationTitle}`);
+        }
+      }
+
+      // AUTO-CHAT PAUSE: Pause if NPC directly addresses the player
+      // This includes: 1) Explicit shouldAskPlayerQuestion flag, OR 2) Content-based detection
+      if (isAutoChat && !autoChatPausedForPlayer) {
+        let shouldPause = false;
+        let pauseReason = '';
+
+        // Method 1: Explicit flag from random timing logic
+        if (shouldAskPlayerQuestion) {
+          const hasQuestion = assistantContent.includes('?');
+          if (hasQuestion) {
+            shouldPause = true;
+            pauseReason = 'prompted to ask player a question';
+          }
+        }
+
+        // Method 2: Content-based detection - NPC directly addressed the player
+        if (!shouldPause && identity) {
+          const playerDirectlyAddressed = isPlayerDirectlyAddressed(assistantContent, identity.name);
+          if (playerDirectlyAddressed) {
+            shouldPause = true;
+            pauseReason = `directly addressed ${identity.name}`;
+          }
+        }
+
+        if (shouldPause) {
+          console.log(`[Auto-Chat] Pausing - ${npc.name} ${pauseReason}`);
+          setAutoChatPausedForPlayer(true);
+          setAutoChatPauseCount(prev => prev + 1);
+        }
+      }
+
       // Generate image asynchronously if requested
       if (imageRequests.length > 0 && identityToken) {
         const imageDesc = imageRequests[0].description;
@@ -894,7 +1219,7 @@ export default function GamePage() {
             }}
             title="View Simulation History"
           >
-            Sim Log
+            Simulation Log
           </button>
           <button
             onClick={() => setShowNpcInfo(!showNpcInfo)}
@@ -932,7 +1257,7 @@ export default function GamePage() {
           <div className="p-3 flex-shrink-0" style={{ borderBottom: '2px solid var(--win95-border-dark)' }}>
             <div className="win95-groupbox">
               <span className="win95-groupbox-label">Character</span>
-              {/* Full-body sprite in center */}
+              {/* Full-body sprite in center - animated if available */}
               <div
                 className="w-full aspect-square max-h-32 flex items-center justify-center mb-2 mx-auto"
                 style={{
@@ -942,14 +1267,13 @@ export default function GamePage() {
                 }}
               >
                 {identity.pixelArtUrl ? (
-                  <img
-                    src={identity.pixelArtUrl}
+                  <AnimatedSprite
+                    spriteUrl={identity.pixelArtUrl}
                     alt={identity.name}
                     className="h-full w-auto object-contain"
-                    style={{ imageRendering: 'pixelated' }}
                   />
                 ) : (
-                  <span className="text-4xl">🌱</span>
+                  <span className="text-4xl">👤</span>
                 )}
               </div>
               {/* Character info below sprite */}
@@ -957,8 +1281,8 @@ export default function GamePage() {
                 <div className="win95-text" style={{ fontWeight: 'bold', fontSize: '14px' }}>
                   {identity.scenario.profession}
                 </div>
-                <div className="win95-text" style={{ fontSize: '11px', color: 'var(--win95-text-dim)', textTransform: 'capitalize' }}>
-                  {identity.persona?.replace(/-/g, ' ') || 'Startup Founder'}
+                <div className="win95-text" style={{ fontSize: '11px', color: 'var(--win95-text-dim)' }}>
+                  {identity.generatedPersona?.type || identity.persona?.replace(/-/g, ' ') || 'Unknown'}
                 </div>
               </div>
               {/* Expandable Backstory Dropdown */}
@@ -1028,10 +1352,10 @@ export default function GamePage() {
             <div className="win95-groupbox">
               <span className="win95-groupbox-label">Stats</span>
               <div className="space-y-1">
-                <PixelMeter label="Family" value={identity.meters.familyHarmony} icon="🏠" />
-                <PixelMeter label="Career" value={identity.meters.careerStanding} icon="💼" />
-                <PixelMeter label="Wealth" value={identity.meters.wealth} icon="💰" />
-                <PixelMeter label="Mental" value={identity.meters.mentalHealth} icon="🧠" />
+                <PixelMeter label="Family" value={identity.meters.familyHarmony} iconClass="pixel-icon-house" />
+                <PixelMeter label="Career" value={identity.meters.careerStanding} iconClass="pixel-icon-briefcase" />
+                <PixelMeter label="Wealth" value={identity.meters.wealth} iconClass="pixel-icon-coin" />
+                <PixelMeter label="Mental" value={identity.meters.mentalHealth} iconClass="pixel-icon-brain" />
               </div>
             </div>
           </div>
@@ -1260,7 +1584,7 @@ export default function GamePage() {
                                 }
                               }}
                               className="w-full text-left px-2 py-1 hover:bg-[#8b0000] hover:text-white"
-                              style={{ fontSize: '10px', color: '#8b0000' }}
+                              style={{ fontSize: '10px', color: 'white', background: '#8b0000', fontWeight: 'bold' }}
                             >
                               Delete
                             </button>
@@ -1309,11 +1633,26 @@ export default function GamePage() {
                   {currentConversation.npcIds.length >= 2 && (
                     <button
                       onClick={() => {
-                        setAllConversations(prev => prev.map(c =>
-                          c.id === conversationId
-                            ? { ...c, autoConverse: !c.autoConverse }
-                            : c
-                        ));
+                        const isCurrentlyOn = currentConversation.autoConverse;
+                        if (!isCurrentlyOn) {
+                          // Turning ON - reset count, pause state, and show notification
+                          setAllConversations(prev => prev.map(c =>
+                            c.id === conversationId
+                              ? { ...c, autoConverse: true, autoChatMessageCount: 0 }
+                              : c
+                          ));
+                          setAutoChatPauseCount(0); // Reset pause count for new session
+                          setAutoChatPausedForPlayer(false); // Clear any lingering pause state
+                          setShowAutoChatNotification(true);
+                        } else {
+                          // Turning OFF - keep count for reference, clear pause state
+                          setAllConversations(prev => prev.map(c =>
+                            c.id === conversationId
+                              ? { ...c, autoConverse: false }
+                              : c
+                          ));
+                          setAutoChatPausedForPlayer(false); // Clear pause state
+                        }
                       }}
                       className="py-0.5 px-2 flex items-center gap-1"
                       style={{
@@ -1429,6 +1768,67 @@ export default function GamePage() {
                         Start Chat
                       </button>
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Auto-Chat Started Notification */}
+            {showAutoChatNotification && (
+              <div className="absolute inset-0 z-30 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.5)' }}>
+                <div className="win95-window" style={{ width: '320px' }}>
+                  <div className="win95-titlebar">
+                    <span className="win95-titlebar-text">Auto-Chat Mode</span>
+                  </div>
+                  <div className="win95-content p-4 text-center">
+                    <p className="win95-text" style={{ fontWeight: 'bold', fontSize: '12px', marginBottom: '8px' }}>
+                      NPCs will now chat automatically!
+                    </p>
+                    <p className="win95-text" style={{ fontSize: '11px', lineHeight: '1.4', marginBottom: '12px' }}>
+                      Watch the drama unfold as characters reveal secrets, confront each other, and advance the story.
+                    </p>
+                    <ul className="win95-text text-left" style={{ fontSize: '10px', lineHeight: '1.6', paddingLeft: '24px', marginBottom: '12px' }}>
+                      <li>• Limited to <strong>10 messages</strong> per session</li>
+                      <li>• Story will progress dramatically</li>
+                      <li>• NPCs will remember this conversation</li>
+                      <li>• Click the button again to stop early</li>
+                    </ul>
+                    <p className="win95-text" style={{ fontSize: '9px', color: '#8b0000', marginBottom: '12px' }}>
+                      Note: Uses more token usage for each session.
+                    </p>
+                    <button
+                      onClick={() => setShowAutoChatNotification(false)}
+                      className="win95-btn"
+                      style={{ fontSize: '11px', padding: '4px 24px' }}
+                    >
+                      Okay
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Auto-Chat Complete Notification */}
+            {showAutoChatComplete && (
+              <div className="absolute inset-0 z-30 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.5)' }}>
+                <div className="win95-window" style={{ width: '300px' }}>
+                  <div className="win95-titlebar">
+                    <span className="win95-titlebar-text">Auto-Chat Complete</span>
+                  </div>
+                  <div className="win95-content p-4 text-center">
+                    <p className="win95-text" style={{ fontWeight: 'bold', fontSize: '12px', marginBottom: '8px' }}>
+                      The conversation has reached its climax!
+                    </p>
+                    <p className="win95-text" style={{ fontSize: '11px', lineHeight: '1.4', marginBottom: '12px' }}>
+                      10 messages exchanged. The NPCs have revealed secrets and advanced the story. Their memories of this conversation will carry over to future chats.
+                    </p>
+                    <button
+                      onClick={() => setShowAutoChatComplete(false)}
+                      className="win95-btn"
+                      style={{ fontSize: '11px', padding: '4px 24px' }}
+                    >
+                      Continue
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1567,51 +1967,94 @@ export default function GamePage() {
           )}
 
           {/* Simulate Modal (Overlay) */}
-          {showSimulateModal && (
-            <div className="absolute inset-0 z-20 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.5)' }}>
-              <div className="win95-window w-72">
-                <div className="win95-titlebar">
-                  <span className="win95-titlebar-text">Time Jump</span>
-                  <div className="win95-titlebar-buttons">
-                    <button className="win95-titlebar-btn" onClick={() => setShowSimulateModal(false)}>×</button>
+          {showSimulateModal && (() => {
+            // Check if player has done any activity
+            const playerHasSpoken = messages.some(m => m.role === 'user');
+            const hasQueuedActions = actions.length > 0;
+            const hasActivity = playerHasSpoken || hasQueuedActions;
+
+            return (
+              <div className="absolute inset-0 z-20 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.5)' }}>
+                <div className="win95-window w-72">
+                  <div className="win95-titlebar">
+                    <span className="win95-titlebar-text">Time Jump</span>
+                    <div className="win95-titlebar-buttons">
+                      <button className="win95-titlebar-btn" onClick={() => setShowSimulateModal(false)}>×</button>
+                    </div>
                   </div>
-                </div>
-                <div className="win95-content p-4">
-                  <p className="win95-text mb-3 text-center" style={{ fontSize: '11px', color: 'var(--win95-text-dim)' }}>
-                    Advance time to simulate events and consequences.
-                  </p>
-                  {actions.length > 0 && (
-                    <p className="win95-text mb-3 text-center" style={{ fontSize: '10px', color: 'var(--win95-accent)' }}>
-                      {actions.length} action{actions.length !== 1 ? 's' : ''} queued
-                    </p>
-                  )}
-                  <div className="flex gap-2 mb-3">
-                    <button
-                      onClick={() => { handleSimulate('day'); setShowSimulateModal(false); }}
-                      className="win95-btn flex-1 py-2"
-                      style={{ background: 'var(--win95-title-active)', color: 'white', fontSize: '13px', fontWeight: 'bold' }}
-                    >
-                      +1 Day
-                    </button>
-                    <button
-                      onClick={() => { handleSimulate('week'); setShowSimulateModal(false); }}
-                      className="win95-btn flex-1 py-2"
-                      style={{ fontSize: '13px' }}
-                    >
-                      +1 Week
-                    </button>
+                  <div className="win95-content p-4">
+                    {!hasActivity ? (
+                      // No activity warning
+                      <>
+                        <div
+                          className="mb-3 p-3 text-center"
+                          style={{
+                            background: '#fff8dc',
+                            border: '2px solid #c9a000',
+                            borderRadius: '4px'
+                          }}
+                        >
+                          <p className="win95-text" style={{ fontSize: '12px', color: '#8b6914', fontWeight: 'bold', marginBottom: '4px' }}>
+                            Nothing has happened yet!
+                          </p>
+                          <p className="win95-text" style={{ fontSize: '10px', color: '#a07d1c' }}>
+                            Talk to NPCs or queue actions before simulating. There&apos;s nothing to simulate.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setShowSimulateModal(false)}
+                          className="win95-btn w-full py-2"
+                          style={{ background: 'var(--win95-title-active)', color: 'white', fontSize: '13px', fontWeight: 'bold' }}
+                        >
+                          Got it
+                        </button>
+                      </>
+                    ) : (
+                      // Normal simulation options
+                      <>
+                        <p className="win95-text mb-3 text-center" style={{ fontSize: '11px', color: 'var(--win95-text-dim)' }}>
+                          Advance time to simulate events and consequences.
+                        </p>
+                        {hasQueuedActions && (
+                          <p className="win95-text mb-3 text-center" style={{ fontSize: '10px', color: 'var(--win95-accent)' }}>
+                            {actions.length} action{actions.length !== 1 ? 's' : ''} queued
+                          </p>
+                        )}
+                        {playerHasSpoken && !hasQueuedActions && (
+                          <p className="win95-text mb-3 text-center" style={{ fontSize: '10px', color: 'var(--win95-danger)' }}>
+                            Conversations will influence the simulation
+                          </p>
+                        )}
+                        <div className="flex gap-2 mb-3">
+                          <button
+                            onClick={() => { handleSimulate('day'); setShowSimulateModal(false); }}
+                            className="win95-btn flex-1 py-2"
+                            style={{ background: 'var(--win95-title-active)', color: 'white', fontSize: '13px', fontWeight: 'bold' }}
+                          >
+                            +1 Day
+                          </button>
+                          <button
+                            onClick={() => { handleSimulate('week'); setShowSimulateModal(false); }}
+                            className="win95-btn flex-1 py-2"
+                            style={{ fontSize: '13px' }}
+                          >
+                            +1 Week
+                          </button>
+                        </div>
+                        <button
+                          onClick={() => setShowSimulateModal(false)}
+                          className="win95-btn w-full"
+                          style={{ fontSize: '11px' }}
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    )}
                   </div>
-                  <button
-                    onClick={() => setShowSimulateModal(false)}
-                    className="win95-btn w-full"
-                    style={{ fontSize: '11px' }}
-                  >
-                    Cancel
-                  </button>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Gallery Modal */}
           {showGallery && (
@@ -2048,10 +2491,12 @@ export default function GamePage() {
                     <span
                       className="win95-text truncate"
                       style={{
-                        fontSize: '8px',
+                        fontSize: '9px',
+                        fontWeight: isResponding && selectedNpc?.id === npc.id ? 'bold' : 'normal',
                         maxWidth: '34px',
                         textDecoration: npc.isDead ? 'line-through' : 'none',
                         color: isResponding && selectedNpc?.id === npc.id ? 'white' : 'var(--win95-text)',
+                        textShadow: isResponding && selectedNpc?.id === npc.id ? '0 1px 2px rgba(0,0,0,0.5)' : 'none',
                       }}
                     >
                       {npc.name.split(' ')[0]}
@@ -2070,19 +2515,26 @@ export default function GamePage() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
-                placeholder="Type a message..."
+                placeholder={autoChatPausedForPlayer ? `You, ${identity?.name || 'Player'}: respond to the conversation...` : "Type a message..."}
                 className="win95-input flex-1"
-                style={{ fontSize: '12px', padding: '4px 8px' }}
+                style={{
+                  fontSize: '12px',
+                  padding: '4px 8px',
+                  background: autoChatPausedForPlayer ? '#ffffd0' : undefined, // Subtle yellow highlight when waiting
+                  borderColor: autoChatPausedForPlayer ? '#c9a000' : undefined,
+                }}
               />
               <button
                 onClick={handleSendMessage}
                 disabled={!input.trim()}
                 className="win95-btn px-4 disabled:opacity-50"
                 style={{
-                  background: input.trim() ? 'var(--win95-title-active)' : undefined,
-                  color: input.trim() ? 'white' : undefined,
+                  background: input.trim() ? 'var(--win95-accent)' : 'var(--win95-mid)',
+                  color: input.trim() ? 'white' : 'var(--win95-text-dim)',
                   fontSize: '12px',
-                  padding: '4px 12px',
+                  fontWeight: 'bold',
+                  padding: '6px 16px',
+                  border: input.trim() ? '2px solid var(--win95-accent)' : undefined,
                 }}
               >
                 Send
@@ -2097,7 +2549,7 @@ export default function GamePage() {
 }
 
 // Helper Components - Win95 + Stardew Valley style stat bar with icons
-function PixelMeter({ label, value, icon }: { label: string; value: number; icon?: string }) {
+function PixelMeter({ label, value, iconClass }: { label: string; value: number; iconClass?: string }) {
   const getColor = (val: number) => {
     if (val >= 70) return 'var(--win95-accent-light)';
     if (val >= 40) return '#d4a017';
@@ -2106,8 +2558,10 @@ function PixelMeter({ label, value, icon }: { label: string; value: number; icon
 
   return (
     <div className="flex items-center gap-1">
-      {icon && (
-        <span style={{ fontSize: '12px', width: '16px', textAlign: 'center' }}>{icon}</span>
+      {iconClass && (
+        <span style={{ width: '16px', height: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span className={`pixel-icon ${iconClass}`} />
+        </span>
       )}
       <span className="win95-text" style={{ fontSize: '10px', color: 'var(--win95-text-dim)', width: '38px' }}>
         {label}
@@ -2133,8 +2587,36 @@ function PixelMeter({ label, value, icon }: { label: string; value: number; icon
 }
 
 // Format message content with actions in italic (no asterisks shown) - compact version
+// Fix spacing issues in AI-generated text (e.g., "May12th" → "May 12th", "the500" → "the 500")
+function fixTextSpacing(text: string): string {
+  let fixed = text;
+
+  // Fix "word + number" patterns (e.g., "the500" → "the 500", "May12th" → "May 12th")
+  // But preserve things like "web3", "24/7", contractions, etc.
+  fixed = fixed.replace(/([a-zA-Z])(\d)/g, (match, letter, digit) => {
+    // Don't add space if it's a known pattern like "web3", "mp3", "3d", etc.
+    const prevWord = fixed.slice(0, fixed.indexOf(match)).split(/\s+/).pop()?.toLowerCase() || '';
+    const commonPatterns = ['web', 'mp', 'h', 'g', 'b', 'v', 'k', 'f', 'p', 'r', 's', 'm', 'i', 'c'];
+    if (commonPatterns.some(p => prevWord.endsWith(p) && digit === '3')) {
+      return match; // Keep "web3", "mp3", etc.
+    }
+    return `${letter} ${digit}`;
+  });
+
+  // Fix "number + word" patterns (e.g., "500ETH" → "500 ETH", "2000dollars" → "2000 dollars")
+  // But preserve ordinals like "1st", "2nd", "3rd", "12th" AND units like "50k", "100m", "5x"
+  fixed = fixed.replace(/(\d)((?!st|nd|rd|th|k|m|b|x|s|px|em|rem|vh|vw|ms|kb|mb|gb)[a-zA-Z])/gi, '$1 $2');
+
+  // Fix double spaces that might have been introduced
+  fixed = fixed.replace(/\s{2,}/g, ' ');
+
+  return fixed;
+}
+
 function formatMessageContent(content: string): React.ReactNode {
-  const parts = content.split(/(\*[^*]+\*)/g);
+  // First fix any spacing issues in the content
+  const fixedContent = fixTextSpacing(content);
+  const parts = fixedContent.split(/(\*[^*]+\*)/g);
 
   return parts.map((part, index) => {
     if (part.startsWith('*') && part.endsWith('*')) {
@@ -2280,6 +2762,60 @@ function extractNPCKnowledge(currentNpc: NPC, otherNpc: NPC, identity: Identity,
   }
 
   return knowledge.length > 0 ? knowledge.join('. ') : null;
+}
+
+// Check if an NPC message directly addresses the player (for auto-chat pause)
+// IMPORTANT: In group chats, "you" can refer to other NPCs, not the player
+// So we ONLY pause when the player's actual NAME is mentioned
+function isPlayerDirectlyAddressed(content: string, playerName: string): boolean {
+  const lowerContent = content.toLowerCase();
+  const lowerPlayerName = playerName.toLowerCase();
+
+  // STRICT: Only trigger if player's actual name is mentioned
+  // This prevents false positives when NPCs are talking to each other
+  if (!lowerContent.includes(lowerPlayerName)) {
+    return false;
+  }
+
+  // Player's name IS mentioned - now check if it's a direct address
+  const hasQuestion = content.includes('?');
+
+  // Patterns that indicate direct address when combined with player's name
+  const directAddressIndicators = [
+    // Question patterns with name
+    `${lowerPlayerName},`,           // "Alex, what do you think?"
+    `${lowerPlayerName}?`,           // "...right, Alex?"
+    `, ${lowerPlayerName}`,          // "What do you think, Alex?"
+    `hey ${lowerPlayerName}`,
+    `listen ${lowerPlayerName}`,
+    `look ${lowerPlayerName}`,
+    // Accusatory/demanding with name nearby
+    `${lowerPlayerName} you`,        // "Alex, you need to..."
+    `you ${lowerPlayerName}`,        // "...you, Alex, are responsible"
+  ];
+
+  // Check if any direct address indicator is present
+  const hasDirectIndicator = directAddressIndicators.some(p => lowerContent.includes(p));
+
+  // If player name mentioned with a question mark, likely addressing player
+  if (hasQuestion) {
+    // Check if question sentence contains player name
+    const sentences = content.split(/[.!]/);
+    for (const sentence of sentences) {
+      if (sentence.includes('?') && sentence.toLowerCase().includes(lowerPlayerName)) {
+        console.log(`[Auto-Chat Detection] Question with player name: "${sentence.trim()}"`);
+        return true;
+      }
+    }
+  }
+
+  // If direct address indicator found
+  if (hasDirectIndicator) {
+    console.log(`[Auto-Chat Detection] Direct address indicator found for ${playerName}`);
+    return true;
+  }
+
+  return false;
 }
 
 // Infer relationship between two NPCs based on their roles
@@ -2438,8 +2974,16 @@ function buildGroupChatPrompt(
   identity: Identity,
   recentMessages: GroupMessage[],
   simulationHistory: SimulationResult[],
-  revelationState?: { revealedSeedIds: string[]; majorRevealedThisRound: boolean }
+  revelationState?: { revealedSeedIds: string[]; majorRevealedThisRound: boolean },
+  conversationNpcIds?: string[],
+  options?: {
+    isAutoChat?: boolean;
+    autoChatMessageCount?: number;
+    shouldAskPlayerQuestion?: boolean;
+  }
 ): string {
+  const { isAutoChat = false, autoChatMessageCount = 0, shouldAskPlayerQuestion = false } = options || {};
+
   // Get NPC background from bullets or backstory
   const npcBackground = npc.bullets?.length > 0
     ? npc.bullets.join('. ')
@@ -2448,8 +2992,11 @@ function buildGroupChatPrompt(
   // Build rich narrative context
   const narrativeContext = buildNarrativeContext(identity, simulationHistory);
 
-  // Get other NPCs in conversation for relationship context
-  const otherNpcs = identity.npcs.filter(n => n.id !== npc.id && !n.isDead && n.isActive);
+  // Get other NPCs in THIS SPECIFIC CONVERSATION (not all NPCs)
+  // This prevents NPCs from referring to someone "in third person" when they're actually in the chat
+  const otherNpcs = conversationNpcIds
+    ? identity.npcs.filter(n => n.id !== npc.id && conversationNpcIds.includes(n.id))
+    : identity.npcs.filter(n => n.id !== npc.id && !n.isDead && n.isActive);
 
   // Get story seeds (or generate if missing for backwards compatibility)
   const storySeeds = identity.storySeeds || [];
@@ -2496,6 +3043,77 @@ function buildGroupChatPrompt(
     identity.meters.familyHarmony < 30 ? 'has serious family problems' : 'has some family tensions';
   const careerStatus = identity.meters.careerStanding > 70 ? 'is doing well at work' :
     identity.meters.careerStanding < 30 ? 'is struggling at work' : 'has an okay job situation';
+
+  // Player persona context - drives NPC reactions to the player's character type
+  const playerPersonaType = identity.generatedPersona?.type || 'Unknown';
+  const playerPersonaTraits = identity.generatedPersona?.traits?.join(', ') || '';
+  const playerPersonaSituation = identity.generatedPersona?.situation || '';
+
+  // Build FULL player story section - includes backstory AND current situation
+  const playerBackstory = identity.scenario.briefBackground?.length > 0
+    ? identity.scenario.briefBackground.map(b => `• ${b}`).join('\n')
+    : identity.scenario.backstory?.slice(0, 200) || '';
+
+  const playerCurrentStory = identity.scenario.currentStory?.length > 0
+    ? identity.scenario.currentStory.map(b => `• ${b}`).join('\n')
+    : '';
+
+  // Get recent player actions (things the player has said/done)
+  const recentPlayerActions = (identity.playerActions || [])
+    .slice(-5) // Last 5 actions
+    .map(a => `• "${a.content}" (${a.context})`)
+    .join('\n');
+
+  // Build player story section for NPC prompt
+  const playerStorySection = `
+=== ABOUT ${identity.name} (THE PLAYER CHARACTER) ===
+Type: ${playerPersonaType}
+Traits: ${playerPersonaTraits || 'complex personality'}
+${playerBackstory ? `\nPAST:\n${playerBackstory}` : ''}
+${playerCurrentStory ? `\nCURRENT SITUATION:\n${playerCurrentStory}` : ''}
+${recentPlayerActions ? `\nRECENT THINGS ${identity.name.toUpperCase()} HAS SAID/DONE:\n${recentPlayerActions}` : ''}
+
+⚠️ You KNOW these facts about ${identity.name}. Use this knowledge naturally in conversation.
+⚠️ Reference their situation, past, or recent statements when relevant.`;
+
+  // Count messages since player last spoke
+  const messagesSincePlayerSpoke = (() => {
+    for (let i = recentMessages.length - 1; i >= 0; i--) {
+      if (recentMessages[i].role === 'user') {
+        return recentMessages.length - 1 - i;
+      }
+    }
+    return recentMessages.length; // Player hasn't spoken in recent messages
+  })();
+
+  // Player involvement directive - encourages NPCs to engage the player
+  let playerInvolvementDirective = '';
+
+  if (shouldAskPlayerQuestion) {
+    // Auto-chat pause: NPC MUST ask player a direct question
+    playerInvolvementDirective = `
+╔══════════════════════════════════════════════════════════════════╗
+║  ❓ YOU MUST ASK ${identity.name.toUpperCase()} A DIRECT QUESTION ❓                 ║
+╚══════════════════════════════════════════════════════════════════╝
+Based on the conversation so far, ask ${identity.name} something that:
+- Relates to their story/situation (debt collector, past, secrets)
+- Or asks their opinion on what's been discussed
+- Or confronts them about something you suspect
+
+END your response with a direct question to ${identity.name}. Example:
+"...so ${identity.name}, what's YOUR take on this?" or "...${identity.name}, where were YOU that night?"`;
+  } else if (!isAutoChat && messagesSincePlayerSpoke >= 3) {
+    // Manual mode: Player hasn't spoken in a while, encourage engagement
+    playerInvolvementDirective = `
+Note: ${identity.name} hasn't spoken recently. Consider:
+- Asking them a direct question
+- Mentioning something about their situation
+- Turning to face them and drawing them into the conversation`;
+  } else if (!isAutoChat && messagesSincePlayerSpoke >= 1) {
+    // Manual mode: Remind NPC that player is present
+    playerInvolvementDirective = `
+Remember: ${identity.name} is present and listening. Don't ignore them entirely.`;
+  }
 
   // Get banned phrases from recent messages to avoid repetition
   const bannedPhrases = getBannedPhrases(recentMessages);
@@ -2545,20 +3163,66 @@ ${speakerName}: "${shortContent.slice(0, 80)}..."
     }
   }
 
+  // Build explicit participant list to prevent identity confusion
+  const participantNames = otherNpcs.map(n => n.name);
+  const isPrivateChat = participantNames.length <= 2;
+  const allParticipants = [identity.name, ...participantNames];
+  const participantSection = `
+╔══════════════════════════════════════════════════════════════════╗
+║  🗣️  PEOPLE IN THIS CONVERSATION (they can ALL hear you):        ║
+║  → ${allParticipants.join(', ')}
+║                                                                    ║
+║  ⭐ ${identity.name} = THE PLAYER CHARACTER (address them as "you")  ║
+║  ⚠️  NEVER say "${identity.name}'s father" - say "your father"     ║
+║  ⚠️  NEVER say "${identity.name}'s debt" - say "your debt"         ║
+║  ⚠️  NEVER refer to ${identity.name} in 3rd person - they're HERE! ║
+╚══════════════════════════════════════════════════════════════════╝`;
+
+  // Story progression directive - prevents repetitive accusation loops
+  const storyProgressionDirective = `
+╔══════════════════════════════════════════════════════════════════╗
+║  ⚡ STORY PROGRESSION - MANDATORY ⚡                              ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Your response MUST do ONE of these - pick the most dramatic:
+1. DROP A BOMBSHELL: Reveal a specific secret, fact, or piece of evidence
+   Example: "I saw you at the marina on March 3rd with a briefcase"
+2. MAKE A CONCRETE DEMAND: State exactly what you want and the deadline
+   Example: "I need $20k by Friday or I'm going to your boss"
+3. TAKE AN ACTION: Do something physical or make a decision
+   Example: "I'm calling Detective Morrison right now" / "I'm leaving"
+4. CONFESS SOMETHING SPECIFIC: Admit a real detail about yourself
+   Example: "Fine. I took $5k from the account. But only because..."
+
+🚫 FORBIDDEN - These will make the story boring:
+- Vague threats ("You should be careful" / "I know things")
+- Rhetorical questions ("You think you scare me?")
+- Repeating what was already said
+- Counter-accusations without new information
+- Taunting or teasing without substance
+- Asking "where is she?" or "where's the money?" repeatedly
+
+⚡ BE DIRECT. BE SPECIFIC. MOVE THE PLOT FORWARD. ⚡`;
+
   return `You ARE ${npc.name}. You're ${npc.role} to ${identity.name}.
 Personality: ${npc.personality}
 Emotional state: ${npc.currentEmotionalState}
 Relationship: ${npc.relationshipStatus}
 Background: ${npcBackground}
+${participantSection}
 
 === CONTEXT ===
 ${conversationContext}
 
 ${narrativeContext ? `Recent events: ${narrativeContext}` : ''}
+${playerStorySection}
 
-${identity.name}'s situation: ${wealthStatus}, ${mentalStatus}.
+Status: ${wealthStatus}, ${mentalStatus}.
 Mode: ${modeDescription}
 ${reactToThisSection}
+${playerInvolvementDirective}
+
+${storyProgressionDirective}
 
 === RESPONSE FORMAT ===
 - 1-2 sentences max. One action in *asterisks*.
@@ -2577,6 +3241,7 @@ ${bannedPhrases}
 - Vague metaphors ("shadows", "strings", "fire", "cards")
 - Making up accusations you weren't given
 - Repeating what someone else just said
+- Referring to someone IN this chat as if they're not here
 
 ${revelationPrompt}
 

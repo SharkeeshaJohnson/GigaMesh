@@ -9,7 +9,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'LifeSim - Your choices. Your consequences. Your life.',
+  title: 'The Sprouts - The reality of the life you choose.',
   description:
     'A hyper-personalized life simulation sandbox game with AI-driven NPCs and emergent storytelling.',
 };

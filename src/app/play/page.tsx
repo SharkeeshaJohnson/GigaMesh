@@ -4,7 +4,7 @@ import { usePrivy } from '@privy-io/react-auth';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Identity, MAX_SAVE_SLOTS } from '@/lib/types';
-import { getAllIdentities } from '@/lib/indexeddb';
+import { getAllIdentities, deleteFromIndexedDB } from '@/lib/indexeddb';
 
 interface SaveSlot {
   index: number;
@@ -17,6 +17,7 @@ export default function PlayPage() {
   const [slots, setSlots] = useState<SaveSlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<number | null>(null);
 
   useEffect(() => {
     if (ready && !authenticated) {
@@ -24,25 +25,31 @@ export default function PlayPage() {
     }
   }, [ready, authenticated, router]);
 
-  useEffect(() => {
-    async function loadSlots() {
-      try {
-        const identities = await getAllIdentities();
-        const slotArray: SaveSlot[] = [];
+  const loadSlots = async () => {
+    try {
+      const identities = await getAllIdentities();
+      const slotArray: SaveSlot[] = [];
 
-        for (let i = 0; i < MAX_SAVE_SLOTS; i++) {
-          const identity = identities.find((id) => id.slotIndex === i) || null;
-          slotArray.push({ index: i, identity });
-        }
+      // Smart slot display:
+      // - If no saves, show just 1 empty slot
+      // - If has saves, show all saves + 1 "New Game" slot (up to MAX_SAVE_SLOTS)
+      const savedCount = identities.length;
+      const slotsToShow = savedCount === 0 ? 1 : Math.min(savedCount + 1, MAX_SAVE_SLOTS);
 
-        setSlots(slotArray);
-      } catch (error) {
-        console.error('Failed to load save slots:', error);
-      } finally {
-        setLoading(false);
+      for (let i = 0; i < slotsToShow; i++) {
+        const identity = identities.find((id) => id.slotIndex === i) || null;
+        slotArray.push({ index: i, identity });
       }
-    }
 
+      setSlots(slotArray);
+    } catch (error) {
+      console.error('Failed to load save slots:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     if (authenticated) {
       loadSlots();
     }
@@ -70,6 +77,20 @@ export default function PlayPage() {
     }
   };
 
+  const handleDelete = async (slotIndex: number) => {
+    const slot = slots.find(s => s.index === slotIndex);
+    if (!slot?.identity) return;
+
+    try {
+      await deleteFromIndexedDB('identities', slot.identity.id);
+      setShowDeleteConfirm(null);
+      setSelectedSlot(null);
+      await loadSlots();
+    } catch (error) {
+      console.error('Failed to delete save:', error);
+    }
+  };
+
   if (!ready || loading) {
     return (
       <main className="min-h-screen flex items-center justify-center">
@@ -81,12 +102,12 @@ export default function PlayPage() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-4">
+    <main className="min-h-screen flex items-center justify-center p-4" style={{ background: 'var(--win95-bg)' }}>
       {/* Main Window */}
       <div className="win95-window w-full max-w-3xl">
         {/* Title Bar */}
         <div className="win95-titlebar">
-          <span className="win95-titlebar-text">Sprouts - Save Files</span>
+          <span className="win95-titlebar-text">The Sprouts - Save Files</span>
           <div className="win95-titlebar-buttons">
             <button className="win95-titlebar-btn">_</button>
             <button className="win95-titlebar-btn">□</button>
@@ -94,21 +115,36 @@ export default function PlayPage() {
           </div>
         </div>
 
-        {/* Menu Bar */}
-        <div className="win95-menubar">
-          <span className="win95-menu-item"><u>F</u>ile</span>
-          <span className="win95-menu-item"><u>E</u>dit</span>
-          <span className="win95-menu-item"><u>V</u>iew</span>
-          <span className="win95-menu-item"><u>H</u>elp</span>
-        </div>
-
-        {/* Toolbar */}
-        <div className="win95-toolbar">
-          <button className="win95-btn win95-btn-sm" onClick={handleOpen} disabled={selectedSlot === null}>
-            Open
+        {/* Action Buttons - More prominent */}
+        <div className="win95-toolbar" style={{ padding: '8px', gap: '8px' }}>
+          <button
+            className="win95-btn"
+            onClick={handleOpen}
+            disabled={selectedSlot === null}
+            style={{
+              background: selectedSlot !== null ? 'var(--win95-accent)' : undefined,
+              color: selectedSlot !== null ? 'white' : undefined,
+              fontWeight: 'bold',
+              padding: '8px 24px',
+            }}
+          >
+            {selectedSlot !== null && slots[selectedSlot]?.identity ? 'Continue' : 'New Game'}
           </button>
-          <div className="win95-toolbar-separator" />
-          <button className="win95-btn win95-btn-sm" onClick={logout}>
+          {selectedSlot !== null && slots[selectedSlot]?.identity && (
+            <button
+              className="win95-btn"
+              onClick={() => setShowDeleteConfirm(selectedSlot)}
+              style={{ padding: '8px 16px' }}
+            >
+              Delete
+            </button>
+          )}
+          <div style={{ flex: 1 }} />
+          <button
+            className="win95-btn"
+            onClick={logout}
+            style={{ padding: '8px 16px' }}
+          >
             Log Out
           </button>
         </div>
@@ -172,7 +208,7 @@ export default function PlayPage() {
                     className="text-center text-sm leading-tight"
                     style={{
                       color: selectedSlot === slot.index ? 'white' : 'var(--win95-text)',
-                      fontFamily: "'VT323', monospace",
+                      fontFamily: "'Consolas', 'Monaco', 'Courier New', monospace",
                       fontSize: '16px',
                       wordBreak: 'break-word',
                     }}
@@ -250,16 +286,53 @@ export default function PlayPage() {
         <div className="win95-statusbar">
           <div className="win95-statusbar-section">
             {selectedSlot !== null
-              ? slots[selectedSlot].identity
+              ? slots[selectedSlot]?.identity
                 ? `Selected: ${slots[selectedSlot].identity!.name}`
-                : 'Selected: Empty Slot'
-              : 'Select a save slot'}
+                : 'Selected: New Game'
+              : 'Click a slot to select'}
           </div>
           <div className="win95-statusbar-section" style={{ flex: '0 0 auto', width: '120px' }}>
             {slots.filter(s => s.identity).length} of {MAX_SAVE_SLOTS} slots
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm !== null && slots[showDeleteConfirm]?.identity && (
+        <div className="win95-dialog-overlay">
+          <div className="win95-dialog" style={{ maxWidth: '360px' }}>
+            <div className="win95-titlebar">
+              <span className="win95-titlebar-text">Delete Save?</span>
+              <div className="win95-titlebar-buttons">
+                <button className="win95-titlebar-btn" onClick={() => setShowDeleteConfirm(null)}>×</button>
+              </div>
+            </div>
+            <div className="win95-content" style={{ padding: '16px' }}>
+              <p className="win95-text" style={{ marginBottom: '16px' }}>
+                Are you sure you want to delete <strong>{slots[showDeleteConfirm].identity!.name}</strong>?
+              </p>
+              <p className="win95-text" style={{ marginBottom: '16px', color: 'var(--win95-danger)' }}>
+                This action cannot be undone.
+              </p>
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button
+                  className="win95-btn"
+                  onClick={() => handleDelete(showDeleteConfirm)}
+                  style={{ background: 'var(--win95-danger)', color: 'white' }}
+                >
+                  Delete
+                </button>
+                <button
+                  className="win95-btn"
+                  onClick={() => setShowDeleteConfirm(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

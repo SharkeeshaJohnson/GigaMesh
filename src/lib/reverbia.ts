@@ -1,8 +1,9 @@
 'use client';
 
-import { useChat as useReverbiaChat, useMemory as useReverbiaMemory, useModels as useReverbiaModels } from '@reverbia/sdk/react';
+import { useChat as useReverbiaChat, useMemory as useReverbiaMemory, useModels as useReverbiaModels, useImageGeneration as useReverbiaImageGeneration } from '@reverbia/sdk/react';
 import { useIdentityToken } from '@privy-io/react-auth';
 import { MODEL_CONFIG } from './models';
+import { IMAGE_MODEL_CONFIG } from './image-models';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://ai-portal-dev.zetachain.com';
 
@@ -69,4 +70,55 @@ export function useModels() {
     getToken: async () => identityToken || null,
     apiUrl: API_URL,
   } as any);
+}
+
+// Export useImageGeneration for generating images via the SDK
+export function useImageGeneration(config?: {
+  onFinish?: (response: any) => void;
+  onError?: (error: Error) => void;
+}) {
+  const { identityToken } = useIdentityToken();
+
+  const imageGen = useReverbiaImageGeneration({
+    getToken: async () => identityToken || null,
+    baseUrl: API_URL,
+    onFinish: config?.onFinish,
+    onError: config?.onError,
+  } as any);
+
+  // Wrap generateImage to use our default model
+  const generateImage = async (args: {
+    prompt: string;
+    model?: string;
+    size?: string;
+    quality?: string;
+    response_format?: string;
+  }) => {
+    const requestParams = {
+      model: args.model || IMAGE_MODEL_CONFIG.sceneGeneration,
+      prompt: args.prompt,
+      size: args.size || '512x512',
+      quality: args.quality,
+      response_format: args.response_format || 'url',
+    };
+    console.log('[reverbia.ts] Calling generateImage with:', {
+      model: requestParams.model,
+      promptPreview: requestParams.prompt.substring(0, 80) + '...',
+      size: requestParams.size,
+      response_format: requestParams.response_format,
+    });
+    const result = await imageGen.generateImage(requestParams);
+    console.log('[reverbia.ts] generateImage response:', {
+      hasError: !!result?.error,
+      error: result?.error,
+      hasData: !!result?.data,
+      imageCount: result?.data?.images?.length || 0,
+    });
+    return result;
+  };
+
+  return {
+    ...imageGen,
+    generateImage,
+  };
 }

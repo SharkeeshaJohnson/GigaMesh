@@ -1,14 +1,14 @@
 // Image Generation Model Configuration for LifeSim
 
 export const IMAGE_MODEL_CONFIG = {
-  // Primary image generation model - FLUX for high-quality pixel art
-  characterGeneration: "flux-pro-1.1",
+  // Primary image generation model - FLUX Schnell for fast pixel art generation
+  characterGeneration: "fireworks/accounts/fireworks/models/flux-1-schnell-fp8",
 
   // Scene/background generation
-  sceneGeneration: "flux-pro-1.1",
+  sceneGeneration: "fireworks/accounts/fireworks/models/flux-1-schnell-fp8",
 
   // Quick emotion sprite variants
-  emotionSprite: "flux-pro-1.1",
+  emotionSprite: "fireworks/accounts/fireworks/models/flux-1-schnell-fp8",
 };
 
 // Image generation settings

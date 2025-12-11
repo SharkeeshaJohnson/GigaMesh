@@ -2,48 +2,50 @@
 
 import { usePrivy } from '@privy-io/react-auth';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useRef } from 'react';
 
-// Featured sprites for the landing page
+// Character sprites for landing page carousel (using static PNGs - GIFs not available from PixelLab)
 const HERO_SPRITES = [
-  'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/2dc75f18-f7ea-40e7-8fb0-489f59c3a3a1/rotations/south.png?t=1765310837621',
-  'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/046f0dc6-9ba6-4e4b-9204-aca8d60d8f3b/rotations/south.png',
-  'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/70a91e3d-0b5a-4547-85ef-0f63f8a045e3/rotations/south.png',
-  'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/d8159f31-5aa3-463f-a3ca-f982d0bf2ecb/rotations/south.png',
-  'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/25eed221-84a2-4fe1-8e5e-8d6293c7b871/rotations/south.png',
+  {
+    id: 'doctor-male',
+    url: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/046f0dc6-9ba6-4e4b-9204-aca8d60d8f3b/rotations/south.png'
+  },
+  {
+    id: 'student-female',
+    url: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/70a91e3d-0b5a-4547-85ef-0f63f8a045e3/rotations/south.png'
+  },
+  {
+    id: 'black-woman',
+    url: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/84b48e89-0ec8-4ead-bfa6-c4a724f8db77/rotations/south.png'
+  },
+  {
+    id: 'dominatrix',
+    url: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/2d3c6279-716c-4f2d-afa4-2d569d53d553/rotations/south.png'
+  },
+  {
+    id: 'teacher-male',
+    url: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/b66867ae-41a2-40e9-9ded-b931097bdc10/rotations/south.png'
+  },
+  {
+    id: 'teacher-female',
+    url: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/7c0fa009-320f-44d5-a03f-68d24a63c6e7/rotations/south.png'
+  },
+  {
+    id: 'student-male',
+    url: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/693033c5-4c49-4dba-b993-6662db2bf5b3/rotations/south.png'
+  },
+  {
+    id: 'doctor-female',
+    url: 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/0a8fddc0-7319-4e8f-9c52-5cdcc096f72a/rotations/south.png'
+  },
 ];
-
-// Mascot sprite (used as logo)
-const MASCOT_SPRITE = 'https://backblaze.pixellab.ai/file/pixellab-characters/0d64bd67-d677-43e0-8926-b89a45b8d74a/62c02269-903c-4d4a-a8ec-710cbb195b08/rotations/south.png';
-
-// Floating particle component
-function Particle() {
-  const style = useMemo(() => {
-    const size = 4 + Math.random() * 4;
-    const left = Math.random() * 100;
-    const top = Math.random() * 100;
-    const delay = Math.random() * 3;
-    const duration = 2 + Math.random() * 2;
-
-    return {
-      width: `${size}px`,
-      height: `${size}px`,
-      left: `${left}%`,
-      top: `${top}%`,
-      animationDelay: `${delay}s`,
-      animationDuration: `${duration}s`,
-    };
-  }, []);
-
-  return <div className="particle" style={style} />;
-}
 
 export default function LandingPage() {
   const { login, authenticated, ready } = usePrivy();
   const router = useRouter();
   const [titleText, setTitleText] = useState('');
   const [showContent, setShowContent] = useState(false);
-  const [buttonPressed, setButtonPressed] = useState(false);
+  const carouselRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (ready && authenticated) {
@@ -55,7 +57,7 @@ export default function LandingPage() {
   useEffect(() => {
     if (!ready) return;
 
-    const finalText = 'LifeSim';
+    const finalText = 'The Sprouts';
     let currentIndex = 0;
 
     const typeInterval = setInterval(() => {
@@ -71,132 +73,84 @@ export default function LandingPage() {
     return () => clearInterval(typeInterval);
   }, [ready]);
 
-  const handleButtonClick = () => {
-    setButtonPressed(true);
-    setTimeout(() => {
-      login();
-      setButtonPressed(false);
-    }, 150);
-  };
-
   return (
-    <main className="hero">
-      {/* Floating particles background */}
-      <div className="particles">
-        {Array.from({ length: 15 }).map((_, i) => (
-          <Particle key={i} />
-        ))}
-      </div>
+    <main className="landing-page">
+      {/* Main Window - Windows 95 Style */}
+      <div className="win95-window landing-window">
+        {/* Title Bar */}
+        <div className="win95-titlebar">
+          <span className="win95-titlebar-text">The Sprouts</span>
+          <div className="win95-titlebar-buttons">
+            <button className="win95-titlebar-btn">_</button>
+            <button className="win95-titlebar-btn">□</button>
+            <button className="win95-titlebar-btn">×</button>
+          </div>
+        </div>
 
-      {/* Mascot Sprite (Logo) */}
-      <div
-        className="mb-6 animate-fade-slide-up"
-        style={{ animationDelay: '0s' }}
-      >
-        <div
-          className="avatar avatar-xl sprite-idle"
-          style={{
-            background: 'linear-gradient(135deg, rgba(166, 130, 255, 0.15) 0%, rgba(88, 135, 255, 0.1) 100%)',
-            border: '3px solid rgba(166, 130, 255, 0.3)',
-            borderRadius: '20px',
-          }}
-        >
-          <img
-            src={MASCOT_SPRITE}
-            alt="LifeSim Character"
-            className="sprite"
-            style={{ width: '80px', height: '80px' }}
-          />
+        {/* Content */}
+        <div className="win95-content landing-content">
+          {/* Title with typewriter effect */}
+          <h1 className="landing-title">
+            {titleText}
+            <span className="landing-cursor">_</span>
+          </h1>
+
+          {/* Tagline */}
+          <p className="landing-tagline">
+            The reality of the life you choose.
+          </p>
+
+          {/* Horizontal scrolling character showcase */}
+          <div
+            className={`landing-sprites-container ${showContent ? 'opacity-100' : 'opacity-0'}`}
+            style={{ transition: 'opacity 0.5s ease' }}
+          >
+            <div ref={carouselRef} className="landing-sprites-carousel">
+              {/* Duplicate sprites for seamless loop */}
+              {[...HERO_SPRITES, ...HERO_SPRITES].map((sprite, index) => (
+                <div key={`${sprite.id}-${index}`} className="landing-sprite-item">
+                  <img
+                    src={sprite.url}
+                    alt={sprite.id}
+                    className="sprite"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* CTA Button - Windows 95 style */}
+          <div className={`landing-cta ${showContent ? 'opacity-100' : 'opacity-0'}`}>
+            {ready && !authenticated && (
+              <button
+                onClick={() => login()}
+                className="win95-btn win95-btn-lg"
+                style={{
+                  background: 'var(--win95-accent)',
+                  color: 'white',
+                  fontWeight: 'bold',
+                  padding: '12px 32px',
+                  fontSize: '18px',
+                }}
+              >
+                Begin Your Story
+              </button>
+            )}
+
+            {ready && authenticated && (
+              <div className="flex flex-center gap-sm">
+                <span className="win95-text win95-loading">Entering simulation</span>
+              </div>
+            )}
+
+            {!ready && (
+              <div className="flex flex-center gap-sm">
+                <span className="win95-text win95-loading">Loading</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
-
-      {/* Title with typewriter effect */}
-      <h1 className="hero-title">
-        {titleText}
-        <span
-          className="inline-block ml-1"
-          style={{
-            animation: 'cursor-blink 1s step-end infinite',
-            color: 'var(--color-primary)',
-          }}
-        >
-          _
-        </span>
-      </h1>
-
-      {/* Tagline */}
-      <p className="hero-subtitle">
-        Your choices. Your consequences. Your life.
-      </p>
-
-      {/* Character showcase */}
-      <div
-        className={`hero-sprites ${showContent ? 'opacity-100' : 'opacity-0'}`}
-        style={{ transition: 'opacity 0.5s ease' }}
-      >
-        {HERO_SPRITES.map((spriteUrl, index) => (
-          <div
-            key={index}
-            className="avatar avatar-lg sprite-idle"
-            style={{
-              animationDelay: `${index * 0.2}s`,
-              background: 'linear-gradient(135deg, var(--color-surface-elevated) 0%, var(--color-surface) 100%)',
-            }}
-          >
-            <img
-              src={spriteUrl}
-              alt={`Character ${index + 1}`}
-              className="sprite"
-              style={{ width: '64px', height: '64px' }}
-            />
-          </div>
-        ))}
-      </div>
-
-      {/* CTA Button */}
-      <div className={`hero-cta ${showContent ? 'opacity-100' : 'opacity-0'}`}>
-        {ready && !authenticated && (
-          <button
-            onClick={handleButtonClick}
-            className={`btn btn-primary btn-lg ${buttonPressed ? 'scale-95' : ''}`}
-            style={{
-              transition: 'all 0.15s ease',
-              transform: buttonPressed ? 'translateY(3px) scale(0.98)' : undefined,
-              boxShadow: buttonPressed
-                ? '0 2px 0 rgba(113, 90, 255, 0.3)'
-                : '0 6px 0 rgba(113, 90, 255, 0.3), 0 4px 12px rgba(113, 90, 255, 0.2)',
-            }}
-          >
-            Begin Your Story
-          </button>
-        )}
-
-        {!ready && (
-          <div className="flex flex-center gap-sm">
-            <div className="loading-spinner" />
-            <span className="text-body text-muted">Loading</span>
-          </div>
-        )}
-      </div>
-
-      {/* Footer text */}
-      <p
-        className={`text-small mt-lg ${showContent ? 'opacity-100' : 'opacity-0'}`}
-        style={{
-          transition: 'opacity 0.5s ease 0.3s',
-          color: 'var(--color-text-muted)',
-        }}
-      >
-        An unfiltered life simulation experience
-      </p>
-
-      {/* Decorative bottom gradient */}
-      <div
-        className="fixed bottom-0 left-0 right-0 h-32 pointer-events-none"
-        style={{
-          background: 'linear-gradient(to top, rgba(166, 130, 255, 0.08), transparent)',
-        }}
-      />
     </main>
   );
 }

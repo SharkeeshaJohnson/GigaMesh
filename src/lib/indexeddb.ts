@@ -156,6 +156,19 @@ export async function getActionsForDay(identityId: string, day: number): Promise
   return db.getAllFromIndex('actions', 'by-identity-day', [identityId, day]);
 }
 
+// Clear all conversations for an identity
+export async function clearConversationsForIdentity(identityId: string): Promise<number> {
+  const db = await getDB();
+  const conversations = await db.getAllFromIndex('conversations', 'by-identity', identityId);
+
+  for (const conv of conversations) {
+    await db.delete('conversations', conv.id);
+  }
+
+  console.log(`[IndexedDB] Cleared ${conversations.length} conversations for identity ${identityId}`);
+  return conversations.length;
+}
+
 // Simulation-specific operations
 export async function getSimulationsForIdentity(identityId: string): Promise<SimulationResult[]> {
   const db = await getDB();

@@ -7,14 +7,19 @@ import {
   Identity,
   JumpType,
   SimulationResult,
+  NPC,
+  SimulationEvent,
 } from '@/lib/types';
 import {
   getFromIndexedDB,
   saveToIndexedDB,
   deleteFromIndexedDB,
   getConversationsForDay,
+  getConversationsForIdentity,
+  clearConversationsForIdentity,
   getQueuedActions,
 } from '@/lib/indexeddb';
+import { Conversation } from '@/lib/types/conversation';
 import { useChat, useMemory } from '@/lib/reverbia';
 import { MODEL_CONFIG } from '@/lib/models';
 import {
@@ -33,6 +38,25 @@ import {
   advanceDay,
   getNarrativeSummary,
 } from '@/lib/narrative';
+import { compositeImage, createSelfie } from '@/lib/image-compositing';
+
+// Event image cache type
+interface EventImageCache {
+  [eventIndex: number]: {
+    imageUrl?: string;
+    isGenerating: boolean;
+    error?: string;
+  };
+}
+
+// Character summary for the day
+interface CharacterSummary {
+  name: string;
+  spriteUrl?: string;
+  isPlayer: boolean;
+  events: string[];
+  meterChanges: { meter: string; change: number }[];
+}
 
 function SimulatePageContent() {
   const { authenticated, ready } = usePrivy();
@@ -45,9 +69,13 @@ function SimulatePageContent() {
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [phase, setPhase] = useState<'loading' | 'results'>('loading');
   const [loadingMessage, setLoadingMessage] = useState('Simulating...');
+  const [loadingProgress, setLoadingProgress] = useState(0);
   const [result, setResult] = useState<SimulationResult | null>(null);
   const [currentEventIndex, setCurrentEventIndex] = useState(0);
+  const [eventImages, setEventImages] = useState<EventImageCache>({});
+  const [characterSummaries, setCharacterSummaries] = useState<CharacterSummary[]>([]);
   const hasRunRef = useRef(false);
+  const imageGenerationRef = useRef(false);
 
   const { sendMessage } = useChat({
     onError: (error) => {
@@ -131,7 +159,64 @@ function SimulatePageContent() {
           }
         }
 
+        // Extract memories from conversations and clear them for fresh start
+        try {
+          const allConversations = await getConversationsForIdentity(loadedIdentity.id);
+          if (allConversations.length > 0) {
+            console.log(`[Memory] Processing ${allConversations.length} conversations before clearing...`);
+
+            // Extract key memories from each conversation and store in NPC's offScreenMemories
+            for (const conv of allConversations) {
+              const npc = updatedIdentity.npcs.find(n => n.id === conv.npcId);
+              if (!npc) continue;
+
+              // Only process conversations with meaningful content (more than 2 messages)
+              if (conv.messages.length <= 2) continue;
+
+              // Build a summary of the conversation
+              const playerMessages = conv.messages
+                .filter(m => m.role === 'user')
+                .map(m => m.content)
+                .slice(-3); // Last 3 player messages
+
+              const npcMessages = conv.messages
+                .filter(m => m.role === 'assistant')
+                .map(m => m.content.substring(0, 200)) // Truncate long messages
+                .slice(-3); // Last 3 NPC messages
+
+              if (playerMessages.length > 0 || npcMessages.length > 0) {
+                // Create a concise memory summary
+                const memorySummary = `Day ${loadedIdentity.currentDay} conversation: Discussed topics with the player. Key points: ${
+                  npcMessages[npcMessages.length - 1]?.substring(0, 100) || 'general conversation'
+                }...`;
+
+                // Add to NPC memories if not already present (avoid duplicates)
+                if (!npc.offScreenMemories.some(m => m.startsWith(`Day ${loadedIdentity.currentDay} conversation`))) {
+                  npc.offScreenMemories.push(memorySummary);
+                  console.log(`[Memory] Added conversation memory for ${npc.name}`);
+                }
+              }
+            }
+
+            // Save the updated identity with new memories
+            await saveToIndexedDB('identities', updatedIdentity);
+
+            // Clear all conversations for a fresh start next day
+            const clearedCount = await clearConversationsForIdentity(loadedIdentity.id);
+            console.log(`[Memory] Cleared ${clearedCount} conversations. NPCs will remember via offScreenMemories.`);
+          }
+        } catch (convError) {
+          console.error('[Memory] Failed to process/clear conversations:', convError);
+        }
+
+        // Build character summaries
+        const summaries = buildCharacterSummaries(updatedIdentity, simulationResult);
+        setCharacterSummaries(summaries);
+
         setPhase('results');
+
+        // Start generating event images in the background (after showing results)
+        generateEventImages(simulationResult, updatedIdentity);
       } catch (error) {
         console.error('Simulation failed:', error);
         setLoadingMessage('Simulation failed. Please try again.');
@@ -387,6 +472,233 @@ function SimulatePageContent() {
     return updated;
   };
 
+  // Infer mood/emotion from event description for gradient backgrounds
+  const inferMoodFromEvent = (description: string, severity: string): string => {
+    const lowerDesc = description.toLowerCase();
+
+    // Check for emotional keywords
+    if (lowerDesc.includes('happy') || lowerDesc.includes('celebrate') || lowerDesc.includes('joy') || lowerDesc.includes('success') || lowerDesc.includes('promotion')) {
+      return 'happy';
+    }
+    if (lowerDesc.includes('love') || lowerDesc.includes('romantic') || lowerDesc.includes('kiss') || lowerDesc.includes('together')) {
+      return 'loving';
+    }
+    if (lowerDesc.includes('sad') || lowerDesc.includes('cry') || lowerDesc.includes('loss') || lowerDesc.includes('grief') || lowerDesc.includes('funeral')) {
+      return 'sad';
+    }
+    if (lowerDesc.includes('angry') || lowerDesc.includes('fight') || lowerDesc.includes('argument') || lowerDesc.includes('furious') || lowerDesc.includes('rage')) {
+      return 'angry';
+    }
+    if (lowerDesc.includes('scared') || lowerDesc.includes('fear') || lowerDesc.includes('terror') || lowerDesc.includes('panic') || lowerDesc.includes('dead') || lowerDesc.includes('kill')) {
+      return 'scared';
+    }
+    if (lowerDesc.includes('suspicious') || lowerDesc.includes('secret') || lowerDesc.includes('affair') || lowerDesc.includes('cheat') || lowerDesc.includes('betray')) {
+      return 'suspicious';
+    }
+
+    // Fall back to severity-based mood
+    if (severity === 'life-changing' || severity === 'major') {
+      return 'scared';
+    }
+    if (severity === 'moderate') {
+      return 'suspicious';
+    }
+
+    return 'neutral';
+  };
+
+  // Generate images for simulation events using sprite compositing (no API calls)
+  const generateEventImages = async (simResult: SimulationResult, ident: Identity) => {
+    if (imageGenerationRef.current) return;
+    imageGenerationRef.current = true;
+
+    for (let i = 0; i < simResult.events.length; i++) {
+      const event = simResult.events[i];
+
+      // Mark as generating
+      setEventImages(prev => ({
+        ...prev,
+        [i]: { isGenerating: true }
+      }));
+
+      try {
+        // Find NPC sprites for involved characters
+        const involvedNpcs = event.involvedNpcs || [];
+        const sprites: Array<{ url: string; position: 'left' | 'right' | 'center' | 'bottom-center' }> = [];
+
+        // Check if player is involved
+        const playerInvolved = involvedNpcs.some(name =>
+          name.toLowerCase() === ident.name.toLowerCase() ||
+          event.description.toLowerCase().includes(ident.name.toLowerCase())
+        );
+
+        if (playerInvolved && ident.pixelArtUrl) {
+          sprites.push({ url: ident.pixelArtUrl, position: 'left' });
+        }
+
+        // Find NPC sprites
+        for (const npcName of involvedNpcs) {
+          if (npcName.toLowerCase() === ident.name.toLowerCase()) continue;
+
+          const npc = ident.npcs.find(n =>
+            n.name.toLowerCase() === npcName.toLowerCase() ||
+            n.name.split(' ')[0].toLowerCase() === npcName.toLowerCase()
+          );
+
+          if (npc?.pixelArtUrl) {
+            const position = sprites.length === 0 ? 'left' : sprites.length === 1 ? 'right' : 'center';
+            sprites.push({ url: npc.pixelArtUrl, position: position as 'left' | 'right' | 'center' });
+            if (sprites.length >= 2) break; // Max 2 characters per scene
+          }
+        }
+
+        // Infer mood from event for gradient background color
+        const mood = inferMoodFromEvent(event.description, event.severity);
+        console.log(`[EventImage] Event ${i}: mood=${mood}, sprites=${sprites.length}`);
+
+        if (sprites.length > 0) {
+          // Composite sprites onto gradient background (no API call needed!)
+          const composited = await compositeImage({
+            // No backgroundUrl - will use gradient based on emotion
+            sprites: sprites.map((s) => ({
+              url: s.url,
+              position: s.position,
+              scale: 4 // Scale up pixel sprites
+            })),
+            options: {
+              width: 512,
+              height: 384,
+              emotion: mood,
+              addVignette: true
+            }
+          });
+
+          setEventImages(prev => ({
+            ...prev,
+            [i]: { imageUrl: composited, isGenerating: false }
+          }));
+        } else if (sprites.length === 0 && involvedNpcs.length > 0) {
+          // Try to find any NPC with a sprite for a selfie-style image
+          const anyNpc = ident.npcs.find(n =>
+            involvedNpcs.some(name =>
+              n.name.toLowerCase().includes(name.toLowerCase()) ||
+              name.toLowerCase().includes(n.name.split(' ')[0].toLowerCase())
+            ) && n.pixelArtUrl
+          );
+
+          if (anyNpc?.pixelArtUrl) {
+            // Create a selfie-style image of the NPC
+            const selfieImage = await createSelfie(anyNpc.pixelArtUrl, mood);
+            setEventImages(prev => ({
+              ...prev,
+              [i]: { imageUrl: selfieImage, isGenerating: false }
+            }));
+          } else {
+            // No sprites available at all
+            setEventImages(prev => ({
+              ...prev,
+              [i]: { isGenerating: false, error: 'No character sprites available' }
+            }));
+          }
+        } else {
+          // No involved NPCs - create a gradient-only image
+          const emptyScene = await compositeImage({
+            sprites: [],
+            options: {
+              width: 512,
+              height: 384,
+              emotion: mood,
+              addVignette: true
+            }
+          });
+          setEventImages(prev => ({
+            ...prev,
+            [i]: { imageUrl: emptyScene, isGenerating: false }
+          }));
+        }
+      } catch (error) {
+        console.error(`[EventImage] Failed to generate image for event ${i}:`, error);
+        setEventImages(prev => ({
+          ...prev,
+          [i]: { isGenerating: false, error: 'Generation failed' }
+        }));
+      }
+    }
+  };
+
+  // Build character summaries from simulation results
+  const buildCharacterSummaries = (ident: Identity, simResult: SimulationResult): CharacterSummary[] => {
+    const summaries: Map<string, CharacterSummary> = new Map();
+
+    // Track player
+    summaries.set(ident.name, {
+      name: ident.name,
+      spriteUrl: ident.pixelArtUrl,
+      isPlayer: true,
+      events: [],
+      meterChanges: simResult.meterChanges.map(m => ({
+        meter: m.meter,
+        change: m.newValue - m.previousValue
+      }))
+    });
+
+    // Track NPCs involved in events
+    for (const event of simResult.events) {
+      const involved = event.involvedNpcs || [];
+
+      for (const npcName of involved) {
+        // Check if it's the player
+        if (npcName.toLowerCase() === ident.name.toLowerCase()) {
+          const playerSummary = summaries.get(ident.name)!;
+          playerSummary.events.push(event.title);
+          continue;
+        }
+
+        // Find NPC
+        const npc = ident.npcs.find(n =>
+          n.name.toLowerCase() === npcName.toLowerCase() ||
+          n.name.split(' ')[0].toLowerCase() === npcName.toLowerCase()
+        );
+
+        if (npc) {
+          if (!summaries.has(npc.name)) {
+            summaries.set(npc.name, {
+              name: npc.name,
+              spriteUrl: npc.pixelArtUrl,
+              isPlayer: false,
+              events: [],
+              meterChanges: []
+            });
+          }
+          summaries.get(npc.name)!.events.push(event.title);
+        }
+      }
+    }
+
+    // Add NPC changes
+    for (const change of simResult.npcChanges) {
+      const npc = ident.npcs.find(n =>
+        n.id === change.npcId ||
+        n.name.toLowerCase() === change.npcId?.toLowerCase()
+      );
+
+      if (npc && summaries.has(npc.name)) {
+        const summary = summaries.get(npc.name)!;
+        if (!summary.events.includes(change.description)) {
+          summary.events.push(`${change.changeType}: ${change.description}`);
+        }
+      }
+    }
+
+    // Convert to array, player first
+    const result = Array.from(summaries.values());
+    return result.sort((a, b) => {
+      if (a.isPlayer) return -1;
+      if (b.isPlayer) return 1;
+      return b.events.length - a.events.length;
+    });
+  };
+
   const handleContinue = () => {
     router.push(`/play/${identityId}`);
   };
@@ -405,222 +717,421 @@ function SimulatePageContent() {
 
   if (!ready || !identity) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-[var(--pixel-bg-dark)]">
-        <div className="pixel-text text-[var(--pixel-text-dim)]">
-          <span className="pixel-loading">Loading</span>
+      <main className="min-h-screen flex items-center justify-center" style={{ background: 'var(--win95-bg)' }}>
+        <div className="win95-text" style={{ color: 'var(--win95-text-dim)' }}>
+          Loading...
         </div>
       </main>
     );
   }
 
-  // Loading phase
+  // Loading phase - Windows 95 styled
   if (phase === 'loading') {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center p-8 bg-[var(--pixel-bg-dark)] relative">
-        {/* Scanline overlay */}
-        <div className="pixel-scanline" />
-
-        {/* Background grid */}
-        <div className="absolute inset-0 opacity-5">
+      <main className="min-h-screen flex flex-col items-center justify-center p-8" style={{ background: 'var(--win95-bg)', fontFamily: 'Consolas, monospace' }}>
+        <div className="win95-window" style={{ width: '400px', maxWidth: '90vw' }}>
+          {/* Title bar - centered */}
           <div
-            className="w-full h-full"
+            className="text-center py-2 px-4"
             style={{
-              backgroundImage: `
-                linear-gradient(var(--pixel-border) 1px, transparent 1px),
-                linear-gradient(90deg, var(--pixel-border) 1px, transparent 1px)
-              `,
-              backgroundSize: '24px 24px',
+              background: 'linear-gradient(90deg, var(--win95-title-active) 0%, var(--win95-accent-light) 100%)',
+              color: 'white',
+              fontFamily: 'Consolas, monospace',
+              fontWeight: 'bold',
+              fontSize: '14px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px'
             }}
-          />
-        </div>
-
-        <div className="max-w-md text-center relative z-10">
-          {/* ASCII loading animation */}
-          <div className="pixel-frame mb-8 p-6">
-            <pre className="pixel-label text-[var(--pixel-gold)] text-center text-xs leading-tight animate-pulse">
-{`  ╔══════════════════╗
-  ║   SIMULATING...  ║
-  ╠══════════════════╣
-  ║  [||||||||     ] ║
-  ╚══════════════════╝`}
-            </pre>
+          >
+            <span className="pixel-icon pixel-icon-hourglass" style={{ filter: 'brightness(0) invert(1)' }} />
+            SIMULATION
           </div>
 
-          <h1 className="pixel-title text-[var(--pixel-parchment)] mb-2">
-            {loadingMessage.toUpperCase()}
-          </h1>
-          <p className="pixel-text text-[var(--pixel-text-dim)]">
-            Simulating {jumpType === 'day' ? '1 day' : '1 week'}...
-          </p>
+          {/* Content */}
+          <div className="p-6 text-center">
+            {/* Hourglass icon */}
+            <div className="mb-4 flex justify-center">
+              <span
+                className="pixel-icon pixel-icon-hourglass pixel-icon-hourglass-animated"
+                style={{ transform: 'scale(3)', transformOrigin: 'center' }}
+              />
+            </div>
+
+            <h2 className="win95-text font-bold text-lg mb-4" style={{ color: 'var(--win95-text)' }}>
+              {loadingMessage}
+            </h2>
+
+            {/* Progress bar */}
+            <div className="win95-progress mb-4">
+              <div
+                className="win95-progress-fill"
+                style={{
+                  width: '60%',
+                  animation: 'progressPulse 1.5s ease-in-out infinite'
+                }}
+              />
+            </div>
+
+            <p className="win95-text" style={{ color: 'var(--win95-text-dim)', fontSize: '12px' }}>
+              Simulating {jumpType === 'day' ? '1 day' : '1 week'}...
+            </p>
+
+            {/* Animated dots */}
+            <div className="mt-4 win95-text" style={{ color: 'var(--win95-accent)', fontSize: '11px' }}>
+              Please wait while fate unfolds
+              <span className="animate-pulse">...</span>
+            </div>
+          </div>
         </div>
+
+        <style jsx>{`
+          @keyframes progressPulse {
+            0%, 100% { width: 30%; }
+            50% { width: 80%; }
+          }
+        `}</style>
       </main>
     );
   }
 
-  // Results phase
+  // Results phase - no result yet
   if (!result) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-[var(--pixel-bg-dark)]">
-        <div className="pixel-text text-[var(--pixel-text-dim)]">No results available</div>
+      <main className="min-h-screen flex items-center justify-center" style={{ background: 'var(--win95-bg)' }}>
+        <div className="win95-text" style={{ color: 'var(--win95-text-dim)' }}>No results available</div>
       </main>
     );
   }
 
   const currentEvent = result.events[currentEventIndex];
+  const currentEventImage = eventImages[currentEventIndex];
+
+  // Severity to color mapping
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case 'minor': return 'var(--win95-text-dim)';
+      case 'moderate': return 'var(--win95-warning)';
+      case 'major': return 'var(--win95-accent)';
+      case 'life-changing': return 'var(--win95-danger)';
+      default: return 'var(--win95-text)';
+    }
+  };
 
   return (
-    <main className="min-h-screen flex flex-col p-8 bg-[var(--pixel-bg-dark)] relative">
-      {/* Scanline overlay */}
-      <div className="pixel-scanline" />
-
-      {/* Background grid */}
-      <div className="absolute inset-0 opacity-5">
+    <main className="h-screen p-4 md:p-8 flex items-center justify-center" style={{ background: 'var(--win95-bg)', fontFamily: 'Consolas, monospace' }}>
+      {/* Main Window - Full height with scrollable content */}
+      <div
+        className="win95-window flex flex-col"
+        style={{
+          width: '100%',
+          maxWidth: '800px',
+          height: 'calc(100vh - 64px)',
+          maxHeight: '900px'
+        }}
+      >
+        {/* Title bar - centered */}
         <div
-          className="w-full h-full"
+          className="flex-shrink-0 text-center py-2 px-4"
           style={{
-            backgroundImage: `
-              linear-gradient(var(--pixel-border) 1px, transparent 1px),
-              linear-gradient(90deg, var(--pixel-border) 1px, transparent 1px)
-            `,
-            backgroundSize: '24px 24px',
+            background: 'linear-gradient(90deg, var(--win95-title-active) 0%, var(--win95-accent-light) 100%)',
+            color: 'white',
+            fontFamily: 'Consolas, monospace',
+            fontWeight: 'bold',
+            fontSize: '14px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px'
           }}
-        />
-      </div>
+        >
+          <span className="pixel-icon pixel-icon-clock" style={{ filter: 'brightness(0) invert(1)' }} />
+          TIME HAS PASSED
+        </div>
 
-      <div className="max-w-3xl mx-auto w-full relative z-10">
         {/* Header */}
-        <div className="text-center mb-8">
-          <div className="pixel-frame inline-block p-4 mb-4">
-            <pre className="pixel-label text-[var(--pixel-gold)] text-xs leading-tight">
-{`╔══════════════════════╗
-║   TIME HAS PASSED    ║
-╚══════════════════════╝`}
-            </pre>
-          </div>
-          <h1 className="pixel-title text-[var(--pixel-gold)] mb-2">
-            DAY {result.fromDay} &gt; DAY {result.toDay}
+        <div className="flex-shrink-0 p-4 text-center" style={{ borderBottom: '2px solid var(--win95-border-dark)' }}>
+          <h1 style={{ color: 'var(--win95-accent)', fontFamily: 'Consolas, monospace', fontWeight: 'bold', fontSize: '20px', marginBottom: '4px' }}>
+            DAY {result.fromDay} → DAY {result.toDay}
           </h1>
-          <p className="pixel-text text-[var(--pixel-text-dim)]">
+          <p style={{ color: 'var(--win95-text-dim)', fontFamily: 'Consolas, monospace', fontSize: '12px' }}>
             {result.events.length} event{result.events.length !== 1 ? 's' : ''} occurred
           </p>
         </div>
 
-        {/* Event Carousel */}
-        {result.events.length > 0 ? (
-          <div className="pixel-frame mb-6">
-            <div className="flex justify-between items-center mb-4">
-              <span className="pixel-label text-[var(--pixel-text-dim)]">
-                EVENT {currentEventIndex + 1}/{result.events.length}
-              </span>
-              <span
-                className={`pixel-label text-xs ${
-                  currentEvent.severity === 'minor'
-                    ? 'text-[var(--pixel-text-dim)]'
-                    : currentEvent.severity === 'moderate'
-                      ? 'text-[var(--pixel-gold)]'
-                      : currentEvent.severity === 'major'
-                        ? 'text-[var(--pixel-purple)]'
-                        : 'text-[var(--pixel-red)]'
-                }`}
-              >
-                [{currentEvent.severity.toUpperCase()}]
-              </span>
-            </div>
-
-            <h2 className="pixel-title text-lg text-[var(--pixel-parchment)] mb-3">
-              {currentEvent.title.toUpperCase()}
-            </h2>
-            <p className="pixel-text text-[var(--pixel-text)] mb-4">{currentEvent.description}</p>
-
-            {currentEvent.involvedNpcs && currentEvent.involvedNpcs.length > 0 && (
-              <p className="pixel-text-small text-[var(--pixel-text-dim)] mb-2">
-                &gt; Involved: {currentEvent.involvedNpcs.join(', ')}
-              </p>
-            )}
-
-            {currentEvent.consequenceChain && (
-              <div className="pixel-frame-inset p-3 mt-4">
-                <span className="pixel-label text-[var(--pixel-gold)]">CAUSE:</span>
-                <p className="pixel-text-small text-[var(--pixel-text-dim)] mt-1">{currentEvent.consequenceChain}</p>
+        {/* Scrollable Content Area */}
+        <div className="flex-1 overflow-y-auto" style={{ background: 'var(--win95-surface)' }}>
+          {/* SECTION 1: Events with Images */}
+          {result.events.length > 0 ? (
+            <div className="p-4" style={{ borderBottom: '2px solid var(--win95-border-dark)' }}>
+              {/* Event Header */}
+              <div className="flex justify-between items-center mb-3">
+                <span style={{ color: 'var(--win95-text)', fontFamily: 'Consolas, monospace', fontSize: '12px', fontWeight: 'bold' }}>
+                  📜 EVENT {currentEventIndex + 1}/{result.events.length}
+                </span>
+                <span
+                  style={{
+                    color: getSeverityColor(currentEvent.severity),
+                    fontFamily: 'Consolas, monospace',
+                    fontSize: '10px',
+                    fontWeight: 'bold',
+                    border: `1px solid ${getSeverityColor(currentEvent.severity)}`,
+                    padding: '2px 8px'
+                  }}
+                >
+                  {currentEvent.severity.toUpperCase()}
+                </span>
               </div>
-            )}
 
-            {/* Navigation */}
-            <div className="flex justify-between mt-6">
-              <button
-                onClick={handlePrevEvent}
-                disabled={currentEventIndex === 0}
-                className="pixel-btn disabled:opacity-30"
+              {/* Event Image */}
+              <div
+                className="mb-3 flex items-center justify-center"
+                style={{
+                  background: 'var(--win95-darkest)',
+                  border: '2px solid var(--win95-border-dark)',
+                  minHeight: '180px',
+                }}
               >
-                &lt; PREV
-              </button>
-              <button
-                onClick={handleNextEvent}
-                disabled={currentEventIndex === result.events.length - 1}
-                className="pixel-btn disabled:opacity-30"
-              >
-                NEXT &gt;
-              </button>
+                {currentEventImage?.isGenerating ? (
+                  <div className="text-center">
+                    <div className="text-3xl mb-2 animate-pulse">🎨</div>
+                    <p style={{ color: 'var(--win95-lightest)', fontFamily: 'Consolas, monospace', fontSize: '11px' }}>
+                      Generating scene...
+                    </p>
+                  </div>
+                ) : currentEventImage?.imageUrl ? (
+                  <img
+                    src={currentEventImage.imageUrl}
+                    alt={currentEvent.title}
+                    className="max-w-full max-h-[250px] object-contain"
+                    style={{ imageRendering: 'pixelated' }}
+                  />
+                ) : (
+                  <div className="text-center p-4">
+                    <div className="text-4xl mb-2">📰</div>
+                    <p style={{ color: 'var(--win95-lightest)', fontFamily: 'Consolas, monospace', fontSize: '11px' }}>
+                      {currentEventImage?.error || 'Image pending...'}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Event Title & Description */}
+              <div className="win95-inset p-3 mb-3">
+                <h2 style={{ color: 'var(--win95-text)', fontFamily: 'Consolas, monospace', fontSize: '13px', fontWeight: 'bold', marginBottom: '8px' }}>
+                  {currentEvent.title.toUpperCase()}
+                </h2>
+                <p style={{ color: 'var(--win95-text)', fontFamily: 'Consolas, monospace', fontSize: '11px', lineHeight: '1.5' }}>
+                  {currentEvent.description}
+                </p>
+
+                {currentEvent.involvedNpcs && currentEvent.involvedNpcs.length > 0 && (
+                  <p style={{ color: 'var(--win95-text-dim)', fontFamily: 'Consolas, monospace', fontSize: '10px', marginTop: '8px' }}>
+                    👥 Involved: {currentEvent.involvedNpcs.join(', ')}
+                  </p>
+                )}
+              </div>
+
+              {/* Event Navigation - Smaller buttons */}
+              <div className="flex justify-between">
+                <button
+                  onClick={handlePrevEvent}
+                  disabled={currentEventIndex === 0}
+                  className="win95-btn"
+                  style={{
+                    opacity: currentEventIndex === 0 ? 0.5 : 1,
+                    fontSize: '10px',
+                    padding: '4px 12px',
+                    fontFamily: 'Consolas, monospace'
+                  }}
+                >
+                  ◀ Prev
+                </button>
+                <button
+                  onClick={handleNextEvent}
+                  disabled={currentEventIndex === result.events.length - 1}
+                  className="win95-btn"
+                  style={{
+                    opacity: currentEventIndex === result.events.length - 1 ? 0.5 : 1,
+                    fontSize: '10px',
+                    padding: '4px 12px',
+                    fontFamily: 'Consolas, monospace'
+                  }}
+                >
+                  Next ▶
+                </button>
+              </div>
             </div>
-          </div>
-        ) : (
-          <div className="pixel-frame mb-6 text-center py-8">
-            <p className="pixel-text text-[var(--pixel-text-dim)]">Nothing significant happened during this time.</p>
-          </div>
-        )}
+          ) : (
+            <div className="p-6 text-center" style={{ borderBottom: '2px solid var(--win95-border-dark)' }}>
+              <p style={{ color: 'var(--win95-text-dim)', fontFamily: 'Consolas, monospace' }}>
+                Nothing significant happened during this time.
+              </p>
+            </div>
+          )}
 
-        {/* Meter Changes */}
-        {result.meterChanges.length > 0 && (
-          <div className="pixel-frame mb-6">
-            <div className="pixel-label text-[var(--pixel-gold)] mb-4">STAT CHANGES</div>
-            <div className="space-y-3">
-              {result.meterChanges.map((change, index) => {
-                const diff = change.newValue - change.previousValue;
-                const isPositive = diff > 0;
-                const isNegative = diff < 0;
+          {/* SECTION 2: Character Summaries - Sentences, no event titles */}
+          {characterSummaries.length > 0 && (
+            <div className="p-4" style={{ borderBottom: '2px solid var(--win95-border-dark)' }}>
+              <h3 style={{ color: 'var(--win95-text)', fontFamily: 'Consolas, monospace', fontSize: '12px', fontWeight: 'bold', marginBottom: '12px' }}>
+                📋 CHARACTER SUMMARIES
+              </h3>
 
-                return (
-                  <div key={index} className="flex items-center justify-between pixel-frame-inset p-2">
-                    <span className="pixel-label text-[var(--pixel-text-dim)] uppercase">
-                      {change.meter.replace(/([A-Z])/g, ' $1').trim()}
-                    </span>
-                    <div className="flex items-center gap-3">
-                      <span className="pixel-text-small text-[var(--pixel-text-dim)]">{change.previousValue}</span>
-                      <span className="pixel-label text-[var(--pixel-text-dim)]">&gt;</span>
-                      <span
-                        className={`pixel-text-small ${
-                          isPositive
-                            ? 'text-[var(--pixel-green)]'
-                            : isNegative
-                              ? 'text-[var(--pixel-red)]'
-                              : 'text-[var(--pixel-text)]'
-                        }`}
-                      >
-                        {change.newValue}
-                      </span>
-                      <span
-                        className={`pixel-label text-xs ${
-                          isPositive
-                            ? 'text-[var(--pixel-green)]'
-                            : isNegative
-                              ? 'text-[var(--pixel-red)]'
-                              : 'text-[var(--pixel-text-dim)]'
-                        }`}
-                      >
-                        ({isPositive ? '+' : ''}{diff})
-                      </span>
+              <div className="space-y-2">
+                {characterSummaries.map((summary, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-start gap-3 p-2"
+                    style={{
+                      background: 'var(--win95-light)',
+                      border: '1px solid var(--win95-border-dark)',
+                    }}
+                  >
+                    {/* Character Sprite */}
+                    <div
+                      className="flex-shrink-0"
+                      style={{
+                        width: '40px',
+                        height: '40px',
+                        background: 'var(--win95-mid)',
+                        border: '1px solid var(--win95-border-dark)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {summary.spriteUrl ? (
+                        <img
+                          src={summary.spriteUrl}
+                          alt={summary.name}
+                          style={{ width: '100%', height: '100%', imageRendering: 'pixelated', objectFit: 'contain' }}
+                        />
+                      ) : (
+                        <span style={{ fontSize: '20px' }}>{summary.isPlayer ? '👤' : '🧑'}</span>
+                      )}
+                    </div>
+
+                    {/* Character Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span style={{ color: 'var(--win95-text)', fontFamily: 'Consolas, monospace', fontSize: '11px', fontWeight: 'bold' }}>
+                          {summary.name}
+                        </span>
+                        {summary.isPlayer && (
+                          <span
+                            style={{
+                              background: 'var(--win95-accent)',
+                              color: 'white',
+                              fontFamily: 'Consolas, monospace',
+                              fontSize: '8px',
+                              fontWeight: 'bold',
+                              padding: '1px 4px'
+                            }}
+                          >
+                            YOU
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Summary as sentence - filter out event titles, show descriptions */}
+                      {summary.events.length > 0 && (
+                        <p style={{ color: 'var(--win95-text-dim)', fontFamily: 'Consolas, monospace', fontSize: '10px', marginTop: '4px', lineHeight: '1.4' }}>
+                          {summary.events
+                            .filter(e => e.includes(':')) // Only show items with descriptions (changeType: description format)
+                            .map(e => e.split(':').slice(1).join(':').trim()) // Get everything after the colon
+                            .filter(e => e.length > 0)
+                            .slice(0, 2)
+                            .join('. ')}
+                          {summary.events.filter(e => !e.includes(':')).length > 0 && summary.events.filter(e => e.includes(':')).length === 0 &&
+                            `Involved in ${summary.events.length} event${summary.events.length > 1 ? 's' : ''} today.`
+                          }
+                        </p>
+                      )}
                     </div>
                   </div>
-                );
-              })}
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Continue Button */}
-        <div className="text-center">
-          <button onClick={handleContinue} className="pixel-btn pixel-btn-primary px-10 py-4">
-            CONTINUE TO DAY {result.toDay}
+          {/* SECTION 3: Stat Changes (Player only) */}
+          {result.meterChanges.length > 0 && (
+            <div className="p-4">
+              <h3 style={{ color: 'var(--win95-text)', fontFamily: 'Consolas, monospace', fontSize: '12px', fontWeight: 'bold', marginBottom: '12px' }}>
+                📊 YOUR STAT CHANGES
+              </h3>
+
+              <div className="space-y-2">
+                {result.meterChanges.map((change, index) => {
+                  const diff = change.newValue - change.previousValue;
+                  const isPositive = diff > 0;
+                  const isNegative = diff < 0;
+
+                  return (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between p-2"
+                      style={{ background: 'var(--win95-light)', border: '1px solid var(--win95-border-dark)' }}
+                    >
+                      <span style={{ color: 'var(--win95-text)', fontFamily: 'Consolas, monospace', fontSize: '10px', textTransform: 'uppercase' }}>
+                        {change.meter.replace(/([A-Z])/g, ' $1').trim()}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span style={{ color: 'var(--win95-text-dim)', fontFamily: 'Consolas, monospace', fontSize: '10px' }}>
+                          {change.previousValue}
+                        </span>
+                        <span style={{ color: 'var(--win95-text-dim)', fontFamily: 'Consolas, monospace' }}>→</span>
+                        <span
+                          style={{
+                            color: isPositive ? 'var(--win95-success)' : isNegative ? 'var(--win95-danger)' : 'var(--win95-text)',
+                            fontFamily: 'Consolas, monospace',
+                            fontSize: '10px',
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          {change.newValue}
+                        </span>
+                        <span
+                          style={{
+                            background: isPositive ? 'var(--win95-success)' : isNegative ? 'var(--win95-danger)' : 'var(--win95-mid)',
+                            color: 'white',
+                            fontFamily: 'Consolas, monospace',
+                            fontSize: '9px',
+                            fontWeight: 'bold',
+                            padding: '2px 6px'
+                          }}
+                        >
+                          {isPositive ? '+' : ''}{diff}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Fixed CTA Button at Bottom */}
+        <div
+          className="flex-shrink-0 p-4 text-center"
+          style={{
+            borderTop: '2px solid var(--win95-border-dark)',
+            background: 'var(--win95-mid)'
+          }}
+        >
+          <button
+            onClick={handleContinue}
+            className="win95-btn win95-btn-primary"
+            style={{
+              padding: '8px 32px',
+              fontFamily: 'Consolas, monospace',
+              fontSize: '12px',
+              fontWeight: 'bold'
+            }}
+          >
+            CONTINUE TO DAY {result.toDay} →
           </button>
         </div>
       </div>
@@ -632,9 +1143,9 @@ export default function SimulatePage() {
   return (
     <Suspense
       fallback={
-        <main className="min-h-screen flex items-center justify-center bg-[var(--pixel-bg-dark)]">
-          <div className="pixel-text text-[var(--pixel-text-dim)]">
-            <span className="pixel-loading">Loading</span>
+        <main className="min-h-screen flex items-center justify-center" style={{ background: 'var(--win95-bg)' }}>
+          <div className="win95-text" style={{ color: 'var(--win95-text-dim)' }}>
+            Loading...
           </div>
         </main>
       }
@@ -681,10 +1192,18 @@ ${npcBackground}
     .join('\n');
   const actionSummary = actions.map((a) => a.content).join('\n');
 
+  // Player persona context
+  const playerPersonaType = identity.generatedPersona?.type || 'Unknown';
+  const playerPersonaTraits = identity.generatedPersona?.traits?.join(', ') || '';
+  const playerPersonaSituation = identity.generatedPersona?.situation || '';
+
   return `Simulate ${jumpDays} day(s) for this life simulation game.
 
 === THE PLAYER ===
 NAME: ${identity.name}
+PERSONA: ${playerPersonaType}
+TRAITS: ${playerPersonaTraits || 'complex personality'}
+${playerPersonaSituation ? `CORE STRUGGLE: ${playerPersonaSituation}` : ''}
 PROFESSION: ${identity.scenario.profession}
 WORKPLACE: ${identity.scenario.workplace}
 BACKGROUND:

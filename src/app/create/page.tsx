@@ -3,7 +3,7 @@
 import { usePrivy } from '@privy-io/react-auth';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, Suspense, useRef } from 'react';
-import { Gender, Difficulty, Identity, DEFAULT_METERS, INITIAL_NPC_COUNT } from '@/lib/types';
+import { Gender, Difficulty, Identity, INITIAL_NPC_COUNT } from '@/lib/types';
 import { saveToIndexedDB } from '@/lib/indexeddb';
 import { useChat } from '@/lib/reverbia';
 import { MODEL_CONFIG } from '@/lib/models';
@@ -19,10 +19,12 @@ import {
 } from '@/lib/content-filter';
 import {
   selectRandomPersona,
+  selectUniquePersonas,
   selectRandomNPCArchetypes,
   getPersonaPromptHint,
   getNPCPromptHint,
   PersonaTemplate,
+  generatePersonaStats,
 } from '@/lib/persona-pools';
 import {
   extractContentFromResponse,
@@ -32,6 +34,21 @@ import {
 import { generateStorySeeds, initializeNarrativeForNewGame } from '@/lib/narrative';
 
 type CreationStep = 'difficulty' | 'character' | 'loading' | 'complete';
+
+// Helper function to fix common text formatting issues from AI-generated content
+function cleanupAIText(text: string): string {
+  if (!text) return text;
+
+  return text
+    // Fix missing space between word and number (e.g., "until18" -> "until 18")
+    .replace(/([a-zA-Z])(\d)/g, '$1 $2')
+    // Fix missing space between number and word (e.g., "18years" -> "18 years")
+    .replace(/(\d)([a-zA-Z])/g, '$1 $2')
+    // Fix double spaces
+    .replace(/\s{2,}/g, ' ')
+    // Trim whitespace
+    .trim();
+}
 
 // Character sprite data
 const CHARACTER_SPRITES: { spriteUrl: string }[] = [
@@ -86,7 +103,6 @@ function CreatePageContent() {
   const { authenticated, ready } = usePrivy();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const carouselRef = useRef<HTMLDivElement>(null);
 
   const [step, setStep] = useState<CreationStep>('difficulty');
   const [slotIndex, setSlotIndex] = useState<number>(0);
@@ -100,15 +116,19 @@ function CreatePageContent() {
   // NSFW warning modal
   const [showNSFWWarning, setShowNSFWWarning] = useState(false);
   const [pendingDifficulty, setPendingDifficulty] = useState<Difficulty | null>(null);
+  // Track if user has confirmed NSFW for THIS session (in addition to localStorage)
+  const [sessionNSFWConfirmed, setSessionNSFWConfirmed] = useState(false);
 
-  // Randomly assigned persona
+  // Randomly assigned persona for selected character
   const [assignedPersona, setAssignedPersona] = useState<PersonaTemplate | null>(null);
+  // Pre-generated unique personas for all characters (keyed by character index)
+  const [characterPersonas, setCharacterPersonas] = useState<Map<number, PersonaTemplate>>(new Map());
 
   const loadingSteps = [
-    { label: 'Generating scenario', icon: '✨' },
-    { label: 'Creating characters', icon: '👥' },
-    { label: 'Building relationships', icon: '💫' },
-    { label: 'Finalizing world', icon: '🌟' },
+    { label: 'Generating scenario', iconClass: 'pixel-icon-sparkle' },
+    { label: 'Creating characters', iconClass: 'pixel-icon-users' },
+    { label: 'Building relationships', iconClass: 'pixel-icon-heart' },
+    { label: 'Finalizing world', iconClass: 'pixel-icon-globe' },
   ];
 
   // Animate through loading steps
@@ -141,32 +161,44 @@ function CreatePageContent() {
     }
   }, [searchParams]);
 
-  // Auto-scroll carousel to selected character
-  useEffect(() => {
-    if (carouselRef.current && selectedCharacterIndex !== null) {
-      const itemWidth = 140; // avatar width + gap
-      const scrollPos = selectedCharacterIndex * itemWidth - carouselRef.current.offsetWidth / 2 + itemWidth / 2;
-      carouselRef.current.scrollTo({ left: scrollPos, behavior: 'smooth' });
-    }
-  }, [selectedCharacterIndex]);
+  // Generate unique personas for all characters when difficulty changes
+  const generateCharacterPersonas = (selectedDifficulty: Difficulty) => {
+    const rating = DIFFICULTY_TO_RATING[selectedDifficulty];
+    const uniquePersonas = selectUniquePersonas(rating, CHARACTER_SPRITES.length);
+    const personaMap = new Map<number, PersonaTemplate>();
+    uniquePersonas.forEach((persona, index) => {
+      personaMap.set(index, persona);
+    });
+    setCharacterPersonas(personaMap);
+  };
 
   const handleDifficultyClick = (selectedDifficulty: Difficulty) => {
-    if (requiresNSFWAcknowledgment(selectedDifficulty) && !hasNSFWAcknowledgment()) {
+    const needsNSFW = requiresNSFWAcknowledgment(selectedDifficulty);
+    const hasGlobalAck = hasNSFWAcknowledgment();
+    const isSwitchingToCrazy = needsNSFW && difficulty && !requiresNSFWAcknowledgment(difficulty);
+
+    // Show warning if:
+    // 1. First time ever selecting NSFW content (!hasGlobalAck), OR
+    // 2. Switching FROM a non-NSFW difficulty TO crazy (!sessionNSFWConfirmed for this switch)
+    if (needsNSFW && (!hasGlobalAck || (isSwitchingToCrazy && !sessionNSFWConfirmed))) {
       setPendingDifficulty(selectedDifficulty);
       setShowNSFWWarning(true);
     } else {
       setDifficulty(selectedDifficulty);
+      generateCharacterPersonas(selectedDifficulty);
       setStep('character');
     }
   };
 
   const handleNSFWAccept = () => {
     setNSFWAcknowledgment(true);
+    setSessionNSFWConfirmed(true); // Mark as confirmed for this session
     setShowNSFWWarning(false);
     if (pendingDifficulty) {
       setDifficulty(pendingDifficulty);
+      generateCharacterPersonas(pendingDifficulty);
       setPendingDifficulty(null);
-      setStep('character');
+      // Don't auto-advance to character step - let user click Next
     }
   };
 
@@ -177,9 +209,9 @@ function CreatePageContent() {
 
   const handleCharacterSelect = (charIndex: number) => {
     setSelectedCharacterIndex(charIndex);
-    if (difficulty) {
-      const rating = DIFFICULTY_TO_RATING[difficulty];
-      const persona = selectRandomPersona(rating);
+    // Use the pre-generated persona for this character
+    const persona = characterPersonas.get(charIndex);
+    if (persona) {
       setAssignedPersona(persona);
     }
   };
@@ -290,7 +322,7 @@ function CreatePageContent() {
           currentStory: scenarioData.currentStory || scenarioData.familyStructure?.currentStory || ['Tension is building.', 'Change is coming.'],
         },
         currentDay: 1,
-        meters: DEFAULT_METERS,
+        meters: generatePersonaStats(persona, selectedDifficulty),
         npcs: allNpcs.map((npc: any, index: number) => ({
           id: crypto.randomUUID(),
           name: npc.name || 'Unknown',
@@ -343,281 +375,439 @@ function CreatePageContent() {
     );
   }
 
+  // Difficulty descriptions for the info panel
+  const DIFFICULTY_DESCRIPTIONS: Record<Difficulty, string> = {
+    realistic: 'A grounded life simulation with realistic experiences. No explicit content.',
+    dramatic: 'Soap opera intensity with secrets, tension, and complex adult relationships. Adult themes are present but not explicit.',
+    crazy: 'Maximum chaos with fully unfiltered content and experiences. Adults only 18+.',
+  };
+
+  // Difficulty colors - light to dark purple progression (matching app palette)
+  const DIFFICULTY_COLORS: Record<Difficulty, { bg: string; text: string }> = {
+    realistic: { bg: '#d4c8f0', text: '#2d2d3d' }, // Light periwinkle - calm
+    dramatic: { bg: '#a682ff', text: '#ffffff' },  // Medium purple - vibrant
+    crazy: { bg: '#715aff', text: '#ffffff' },     // Deep purple - intense
+  };
+
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center p-6">
+    <main className="min-h-screen flex flex-col items-center justify-center p-6" style={{ background: 'var(--win95-bg)' }}>
       {/* NSFW Warning Modal */}
       {showNSFWWarning && (
-        <div className="dialog-overlay">
-          <div className="dialog" style={{ maxWidth: '440px' }}>
-            <div className="flex items-center gap-4 mb-6">
-              <div
-                className="text-4xl w-16 h-16 flex flex-center rounded-xl"
-                style={{ background: 'var(--color-danger-bg)' }}
-              >
-                ⚠️
-              </div>
-              <div>
-                <h2 className="text-h2 mb-1">Content Warning</h2>
-                <p className="text-small">Crazy mode contains mature content</p>
+        <div className="win95-dialog-overlay">
+          <div className="win95-dialog" style={{ maxWidth: '440px' }}>
+            <div className="win95-titlebar">
+              <span className="win95-titlebar-text">Content Warning</span>
+              <div className="win95-titlebar-buttons">
+                <button className="win95-titlebar-btn" onClick={handleNSFWDecline}>×</button>
               </div>
             </div>
+            <div className="win95-content" style={{ padding: '16px' }}>
+              <div className="flex items-start gap-3 mb-4">
+                <span style={{ fontSize: '32px' }}>⚠️</span>
+                <div>
+                  <p className="win95-text" style={{ fontWeight: 'bold', marginBottom: '8px' }}>
+                    Crazy mode contains mature content
+                  </p>
+                  <p className="win95-text" style={{ fontSize: '14px', color: 'var(--win95-text-dim)' }}>
+                    This mode includes:
+                  </p>
+                </div>
+              </div>
 
-            <div className="card-flat p-4 mb-6">
-              <p className="text-body mb-3">This mode includes:</p>
-              <ul className="space-y-2">
-                {['Explicit sexual content', 'Strong language', 'Dark themes', 'Graphic violence references'].map((item, i) => (
-                  <li key={i} className="flex items-center gap-2 text-small">
-                    <span style={{ color: 'var(--color-danger)' }}>•</span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
+              <div className="win95-panel-inset" style={{ padding: '12px', marginBottom: '16px' }}>
+                <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                  {['Explicit sexual content', 'Strong language', 'Dark themes', 'Graphic violence references'].map((item, i) => (
+                    <li key={i} className="win95-text" style={{ fontSize: '14px', marginBottom: '4px' }}>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
 
-            <p className="text-body mb-6" style={{ color: 'var(--color-danger)', fontWeight: 'bold' }}>
-              You must be 18 years or older to continue.
-            </p>
+              <p className="win95-text" style={{ color: 'var(--win95-danger)', fontWeight: 'bold', marginBottom: '16px' }}>
+                You must be 18 years or older to continue.
+              </p>
 
-            <div className="flex gap-3">
-              <button onClick={handleNSFWAccept} className="btn btn-danger flex-1">
-                I am 18+ - Continue
-              </button>
-              <button onClick={handleNSFWDecline} className="btn btn-secondary flex-1">
-                Cancel
-              </button>
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={handleNSFWAccept}
+                  className="win95-btn"
+                  style={{ background: 'var(--win95-danger)', color: 'white' }}
+                >
+                  I am 18+ - Continue
+                </button>
+                <button onClick={handleNSFWDecline} className="win95-btn">
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Main Content Card */}
-      <div className="game-frame w-full" style={{ maxWidth: '700px' }}>
-        <div className="game-frame-inner">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="text-h1 mb-1">
-                {step === 'difficulty' && 'Choose Your Experience'}
-                {step === 'character' && 'Choose Your Avatar'}
-                {step === 'loading' && 'Creating World'}
-                {step === 'complete' && 'Ready!'}
-              </h1>
-              <p className="text-small">
-                {step === 'difficulty' && 'This determines the tone of your story'}
-                {step === 'character' && 'Pick a character to represent you'}
-                {step === 'loading' && loadingMessage}
-                {step === 'complete' && 'Your world has been created'}
-              </p>
-            </div>
-            {step !== 'loading' && (
-              <button
-                onClick={() => {
-                  if (step === 'character') {
-                    setStep('difficulty');
-                    setDifficulty(null);
-                    setSelectedCharacterIndex(null);
-                    setAssignedPersona(null);
-                  } else if (step === 'difficulty' || step === 'complete') {
-                    router.push('/play');
-                  }
-                }}
-                className="btn btn-ghost btn-sm"
-              >
-                {step === 'character' ? '← Back' : '✕'}
-              </button>
-            )}
+      {/* Main Window - Windows 95 Style */}
+      <div className="win95-window w-full" style={{ maxWidth: step === 'character' ? '620px' : '500px', transition: 'max-width 0.3s ease' }}>
+        {/* Title Bar */}
+        <div className="win95-titlebar">
+          <span className="win95-titlebar-text">
+            {step === 'difficulty' && 'Choose Your Experience'}
+            {step === 'character' && 'Choose Your Avatar'}
+            {step === 'loading' && 'Creating World'}
+            {step === 'complete' && 'Ready!'}
+          </span>
+          <div className="win95-titlebar-buttons">
+            <button className="win95-titlebar-btn">_</button>
+            <button className="win95-titlebar-btn">□</button>
+            <button className="win95-titlebar-btn" onClick={() => router.push('/play')}>×</button>
           </div>
+        </div>
 
+        {/* Content */}
+        <div className="win95-content" style={{ padding: '16px' }}>
           {/* Step 1: Difficulty Selection */}
           {step === 'difficulty' && (
-            <div className="animate-fade-slide-up">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                {(['realistic', 'dramatic', 'crazy'] as Difficulty[]).map((diff, index) => {
-                  const info = DIFFICULTY_INFO[diff];
-                  const styles = DIFFICULTY_STYLES[diff];
+            <div>
+              {/* Difficulty Buttons - Horizontal bars */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+                {(['realistic', 'dramatic', 'crazy'] as Difficulty[]).map((diff) => {
+                  const colors = DIFFICULTY_COLORS[diff];
+                  const isSelected = difficulty === diff;
                   return (
                     <button
                       key={diff}
-                      onClick={() => handleDifficultyClick(diff)}
-                      className="difficulty-card animate-fade-slide-up"
-                      style={{ animationDelay: `${index * 0.1}s` }}
+                      onClick={() => {
+                        if (diff === 'crazy' && requiresNSFWAcknowledgment(diff) && !hasNSFWAcknowledgment()) {
+                          setPendingDifficulty(diff);
+                          setShowNSFWWarning(true);
+                        } else {
+                          setDifficulty(diff);
+                        }
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '14px 20px',
+                        background: colors.bg,
+                        color: colors.text,
+                        border: isSelected ? '3px solid #000' : '2px solid #2d2d3d',
+                        fontFamily: "'Consolas', 'Monaco', 'Courier New', monospace",
+                        fontSize: '20px',
+                        fontWeight: 'bold',
+                        textTransform: 'uppercase',
+                        cursor: 'pointer',
+                        textAlign: 'center',
+                        boxShadow: isSelected ? 'inset 0 0 0 2px rgba(255,255,255,0.5)' : 'none',
+                        transition: 'all 0.15s ease',
+                      }}
                     >
-                      <div className="difficulty-icon">{styles.icon}</div>
-                      <div className="difficulty-title">{info.label}</div>
-                      <div className="difficulty-desc">{info.description}</div>
-                      {info.isNSFW && (
-                        <span className="badge badge-danger mt-3">18+</span>
-                      )}
+                      {diff === 'realistic' && 'Realistic'}
+                      {diff === 'dramatic' && 'Dramatic'}
+                      {diff === 'crazy' && 'Crazy'}
                     </button>
                   );
                 })}
               </div>
 
-              <div className="text-center">
-                <button onClick={() => router.push('/play')} className="btn btn-ghost">
-                  ← Back to Menu
+              {/* Description Panel - Shows when difficulty is selected */}
+              <div
+                className="win95-panel-inset"
+                style={{
+                  padding: '12px',
+                  marginBottom: '16px',
+                  minHeight: '60px',
+                  background: 'white',
+                }}
+              >
+                {difficulty ? (
+                  <p className="win95-text" style={{ margin: 0, fontSize: '14px' }}>
+                    {DIFFICULTY_DESCRIPTIONS[difficulty]}
+                  </p>
+                ) : (
+                  <p className="win95-text" style={{ margin: 0, fontSize: '14px', color: 'var(--win95-text-dim)' }}>
+                    Select an experience level above to see details.
+                  </p>
+                )}
+              </div>
+
+              {/* Navigation Buttons */}
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'space-between' }}>
+                <button
+                  className="win95-btn"
+                  onClick={() => router.push('/play')}
+                  style={{ padding: '8px 20px' }}
+                >
+                  Back
+                </button>
+                <button
+                  className="win95-btn"
+                  onClick={() => {
+                    if (difficulty) {
+                      // Generate unique personas if not already done
+                      if (characterPersonas.size === 0) {
+                        generateCharacterPersonas(difficulty);
+                      }
+                      setStep('character');
+                    }
+                  }}
+                  disabled={!difficulty}
+                  style={{
+                    padding: '8px 20px',
+                    background: difficulty ? 'var(--win95-accent)' : undefined,
+                    color: difficulty ? 'white' : undefined,
+                    fontWeight: 'bold',
+                  }}
+                >
+                  Next
                 </button>
               </div>
             </div>
           )}
 
-          {/* Step 2: Character Selection (Horizontal Carousel) */}
+          {/* Step 2: Character Selection (Grid + Preview Layout) */}
           {step === 'character' && (
-            <div className="animate-fade-slide-up">
-              {/* Horizontal Character Carousel */}
-              <div className="mb-8">
+            <div>
+              {/* Main Layout: Grid on left, Preview on right */}
+              <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+                {/* Left: Character Grid - 3 columns x 2 rows visible with vertical scroll */}
                 <div
-                  ref={carouselRef}
-                  className="character-carousel px-8"
-                  style={{ paddingTop: '32px', paddingBottom: '32px' }}
+                  className="win95-panel-inset"
+                  style={{
+                    flex: '0 0 280px',
+                    padding: '16px',
+                    background: 'var(--win95-bg)',
+                    height: '320px',
+                    overflowY: 'auto',
+                    overflowX: 'hidden',
+                  }}
                 >
-                  {CHARACTER_SPRITES.map((char, index) => {
-                    const isSelected = selectedCharacterIndex === index;
-                    return (
-                      <div
-                        key={index}
-                        className={`character-carousel-item ${isSelected ? 'selected' : ''}`}
-                        onClick={() => handleCharacterSelect(index)}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <div
-                          className={`avatar avatar-xl ${isSelected ? 'avatar-selected animate-glow' : ''}`}
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(3, 1fr)',
+                      gap: '12px',
+                    }}
+                  >
+                    {CHARACTER_SPRITES.map((char, index) => {
+                      const isSelected = selectedCharacterIndex === index;
+                      return (
+                        <button
+                          key={index}
+                          onClick={() => handleCharacterSelect(index)}
                           style={{
-                            width: '120px',
-                            height: '120px',
+                            width: '100%',
+                            aspectRatio: '1',
+                            cursor: 'pointer',
+                            padding: '10px',
                             background: isSelected
-                              ? 'linear-gradient(135deg, rgba(166, 130, 255, 0.2) 0%, rgba(88, 135, 255, 0.15) 100%)'
-                              : 'linear-gradient(135deg, var(--color-surface-elevated) 0%, var(--color-surface) 100%)',
+                              ? 'var(--win95-accent)'
+                              : 'linear-gradient(180deg, var(--win95-lightest) 0%, var(--win95-light) 100%)',
+                            border: '2px solid',
+                            borderColor: isSelected
+                              ? '#000'
+                              : 'var(--win95-border-light) var(--win95-border-dark) var(--win95-border-dark) var(--win95-border-light)',
+                            borderRadius: '6px',
+                            boxShadow: isSelected
+                              ? 'inset 0 0 0 1px rgba(255,255,255,0.3)'
+                              : '1px 1px 0 var(--win95-border-darker)',
+                            transition: 'all 0.15s ease',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
                           }}
                         >
                           <img
                             src={char.spriteUrl}
                             alt={`Character ${index + 1}`}
-                            className={`sprite ${isSelected ? 'sprite-idle' : ''}`}
-                            style={{ width: '80px', height: '80px' }}
+                            className="sprite"
+                            style={{
+                              width: '48px',
+                              height: '48px',
+                              opacity: isSelected ? 1 : 0.85,
+                            }}
                           />
-                        </div>
-                      </div>
-                    );
-                  })}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
-                {/* Selection indicator */}
-                <div className="text-center">
-                  <p className="text-small">
-                    {selectedCharacterIndex !== null
-                      ? `Character ${selectedCharacterIndex + 1} selected`
-                      : 'Scroll to browse • Click to select'}
-                  </p>
+                {/* Right: Character Preview Panel */}
+                <div
+                  className="win95-panel-inset"
+                  style={{
+                    flex: '1',
+                    padding: '16px',
+                    background: 'white',
+                    height: '320px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: selectedCharacterIndex === null ? 'center' : 'flex-start',
+                    animation: selectedCharacterIndex !== null ? 'fade-slide-up 0.3s ease-out' : 'none',
+                  }}
+                >
+                  {selectedCharacterIndex === null ? (
+                    <p className="win95-text" style={{ color: 'var(--win95-text-dim)', textAlign: 'center' }}>
+                      Select a character<br />to preview
+                    </p>
+                  ) : (
+                    <>
+                      {/* Large Character Preview */}
+                      <div
+                        style={{
+                          marginBottom: '12px',
+                          padding: '8px',
+                          background: 'var(--win95-light)',
+                          border: '2px solid var(--win95-border-dark)',
+                        }}
+                      >
+                        <img
+                          src={CHARACTER_SPRITES[selectedCharacterIndex].spriteUrl}
+                          alt="Selected character"
+                          className="sprite sprite-idle"
+                          style={{ width: '96px', height: '96px' }}
+                        />
+                      </div>
+
+                      {/* Story Type Info */}
+                      {assignedPersona && (
+                        <div style={{ width: '100%', textAlign: 'center' }}>
+                          <p className="win95-text" style={{ fontWeight: 'bold', color: 'var(--win95-accent)', fontSize: '16px', marginBottom: '4px' }}>
+                            {assignedPersona.type}
+                          </p>
+                          <p className="win95-text" style={{ fontSize: '12px', marginBottom: '8px', color: 'var(--win95-text-dim)' }}>
+                            {assignedPersona.traits.join(' • ')}
+                          </p>
+                          <p className="win95-text" style={{ fontSize: '12px', marginBottom: '12px', lineHeight: '1.4' }}>
+                            {assignedPersona.backstoryHints[0]}
+                          </p>
+                          <button
+                            onClick={() => {
+                              if (difficulty && selectedCharacterIndex !== null) {
+                                const rating = DIFFICULTY_TO_RATING[difficulty];
+                                // Get a new random persona different from current one
+                                let newPersona = selectRandomPersona(rating);
+                                // Try to get a different one (up to 5 attempts)
+                                let attempts = 0;
+                                while (newPersona.id === assignedPersona?.id && attempts < 5) {
+                                  newPersona = selectRandomPersona(rating);
+                                  attempts++;
+                                }
+                                setAssignedPersona(newPersona);
+                                // Update the character's persona in the map
+                                setCharacterPersonas(prev => {
+                                  const newMap = new Map(prev);
+                                  newMap.set(selectedCharacterIndex, newPersona);
+                                  return newMap;
+                                });
+                              }
+                            }}
+                            className="win95-btn win95-btn-sm"
+                          >
+                            Reroll Story
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
 
-              {/* Story Type Preview */}
-              {selectedCharacterIndex !== null && assignedPersona && (
-                <div className="card-flat p-5 mb-6 animate-scale-in">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <p className="text-caption mb-1">Your Story Type</p>
-                      <h3 className="text-h3" style={{ color: 'var(--color-primary)' }}>
-                        {assignedPersona.type}
-                      </h3>
-                    </div>
-                    <button
-                      onClick={() => {
-                        if (difficulty) {
-                          const rating = DIFFICULTY_TO_RATING[difficulty];
-                          const newPersona = selectRandomPersona(rating);
-                          setAssignedPersona(newPersona);
-                        }
-                      }}
-                      className="btn btn-ghost btn-sm"
-                    >
-                      🎲 Reroll
-                    </button>
-                  </div>
-                  <p className="text-small mb-2">
-                    Traits: {assignedPersona.traits.join(', ')}
-                  </p>
-                  <p className="text-body" style={{ color: 'var(--color-text-secondary)' }}>
-                    {assignedPersona.backstoryHints[Math.floor(Math.random() * assignedPersona.backstoryHints.length)]}
-                  </p>
-                </div>
-              )}
-
-              {/* Confirm Button */}
-              <button
-                onClick={handleCharacterConfirm}
-                disabled={selectedCharacterIndex === null || !assignedPersona}
-                className="btn btn-primary btn-lg w-full"
-              >
-                Start Your Life →
-              </button>
+              {/* Navigation Buttons */}
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'space-between' }}>
+                <button
+                  className="win95-btn"
+                  onClick={() => {
+                    setStep('difficulty');
+                    setSelectedCharacterIndex(null);
+                    setAssignedPersona(null);
+                    // Reset session NSFW confirmation when going back
+                    // This ensures user is asked again if they switch to Crazy
+                    setSessionNSFWConfirmed(false);
+                  }}
+                  style={{ padding: '8px 20px' }}
+                >
+                  Back
+                </button>
+                <button
+                  className="win95-btn"
+                  onClick={handleCharacterConfirm}
+                  disabled={selectedCharacterIndex === null || !assignedPersona}
+                  style={{
+                    padding: '8px 20px',
+                    background: (selectedCharacterIndex !== null && assignedPersona) ? 'var(--win95-accent)' : undefined,
+                    color: (selectedCharacterIndex !== null && assignedPersona) ? 'white' : undefined,
+                    fontWeight: 'bold',
+                  }}
+                >
+                  Start Your Life
+                </button>
+              </div>
             </div>
           )}
 
           {/* Loading */}
           {step === 'loading' && (
-            <div className="max-w-md mx-auto text-center animate-fade-in">
+            <div style={{ textAlign: 'center' }}>
               {/* Animated Character */}
-              <div className="mb-8">
+              <div style={{ marginBottom: '16px' }}>
                 {selectedCharacterIndex !== null && (
-                  <div
-                    className="avatar avatar-xl sprite-idle mx-auto"
-                    style={{
-                      width: '120px',
-                      height: '120px',
-                      background: 'linear-gradient(135deg, rgba(166, 130, 255, 0.15) 0%, rgba(88, 135, 255, 0.1) 100%)',
-                    }}
-                  >
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
                     <img
                       src={CHARACTER_SPRITES[selectedCharacterIndex].spriteUrl}
                       alt="Your character"
-                      className="sprite"
-                      style={{ width: '80px', height: '80px' }}
+                      className="sprite sprite-idle"
+                      style={{ width: '64px', height: '64px' }}
                     />
                   </div>
                 )}
               </div>
 
               {/* Progress Bar */}
-              <div className="progress mb-6" style={{ height: '8px' }}>
+              <div className="win95-progress" style={{ marginBottom: '16px' }}>
                 <div
-                  className="progress-fill"
+                  className="win95-progress-fill"
                   style={{ width: `${((loadingStep + 1) / loadingSteps.length) * 100}%` }}
                 />
               </div>
 
               {/* Progress Steps */}
-              <div className="space-y-3 mb-6">
+              <div className="win95-panel-inset" style={{ padding: '12px', marginBottom: '16px', background: 'white', textAlign: 'left' }}>
                 {loadingSteps.map((s, index) => (
                   <div
                     key={index}
-                    className={`flex items-center gap-3 p-3 rounded-lg transition-all ${
-                      index === loadingStep ? 'card-flat' : ''
-                    }`}
                     style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '4px 0',
                       opacity: index <= loadingStep ? 1 : 0.4,
                     }}
                   >
-                    <span className="text-xl">
-                      {index < loadingStep ? '✓' : s.icon}
+                    <span style={{ fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '16px', height: '16px' }}>
+                      {index < loadingStep ? (
+                        <span className="pixel-icon pixel-icon-check" />
+                      ) : (
+                        <span className={`pixel-icon ${s.iconClass}`} />
+                      )}
                     </span>
                     <span
-                      className={`text-body ${index === loadingStep ? 'font-bold' : ''}`}
+                      className="win95-text"
                       style={{
-                        color: index === loadingStep ? 'var(--color-primary)' : undefined,
+                        fontSize: '14px',
+                        fontWeight: index === loadingStep ? 'bold' : 'normal',
+                        color: index === loadingStep ? 'var(--win95-accent)' : undefined,
                       }}
                     >
                       {s.label}
                     </span>
                     {index === loadingStep && (
-                      <div className="loading-spinner ml-auto" style={{ width: '16px', height: '16px' }} />
+                      <span className="win95-loading" style={{ marginLeft: 'auto', fontSize: '14px' }}></span>
                     )}
                   </div>
                 ))}
               </div>
 
-              <p className="text-small">
+              <p className="win95-text" style={{ fontSize: '14px', color: 'var(--win95-text-dim)' }}>
                 Generating {INITIAL_NPC_COUNT} unique characters...
               </p>
             </div>
@@ -625,73 +815,66 @@ function CreatePageContent() {
 
           {/* Complete */}
           {step === 'complete' && identity && (
-            <div className="animate-fade-slide-up">
+            <div>
               {/* Carousel Navigation */}
-              <div className="flex items-center justify-between mb-4">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                 <button
                   onClick={() => setCarouselIndex(Math.max(0, carouselIndex - 1))}
                   disabled={carouselIndex === 0}
-                  className="btn btn-ghost btn-sm"
+                  className="win95-btn win95-btn-sm"
                 >
-                  ← Prev
+                  Prev
                 </button>
-                <span className="badge badge-primary">
+                <span className="win95-text" style={{ fontWeight: 'bold', color: 'var(--win95-accent)' }}>
                   {carouselIndex === 0 ? 'You' : `Character ${carouselIndex}/${identity.npcs.length}`}
                 </span>
                 <button
                   onClick={() => setCarouselIndex(Math.min(identity.npcs.length, carouselIndex + 1))}
                   disabled={carouselIndex === identity.npcs.length}
-                  className="btn btn-ghost btn-sm"
+                  className="win95-btn win95-btn-sm"
                 >
-                  Next →
+                  Next
                 </button>
               </div>
 
               {/* Player Card */}
               {carouselIndex === 0 && (
-                <div className="card mb-6">
-                  <div className="flex gap-4 mb-4 pb-4" style={{ borderBottom: '1px solid var(--color-surface)' }}>
-                    <div className="avatar avatar-lg sprite-idle">
-                      {selectedCharacterIndex !== null && CHARACTER_SPRITES[selectedCharacterIndex] && (
-                        <img
-                          src={CHARACTER_SPRITES[selectedCharacterIndex].spriteUrl}
-                          alt="You"
-                          className="sprite"
-                          style={{ width: '64px', height: '64px' }}
-                        />
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-caption">Your Name</p>
-                      <h2 className="text-h2" style={{ color: 'var(--color-primary)' }}>
+                <div className="win95-groupbox" style={{ marginBottom: '16px' }}>
+                  <span className="win95-groupbox-label">Your Character</span>
+                  <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+                    {selectedCharacterIndex !== null && CHARACTER_SPRITES[selectedCharacterIndex] && (
+                      <img
+                        src={CHARACTER_SPRITES[selectedCharacterIndex].spriteUrl}
+                        alt="You"
+                        className="sprite"
+                        style={{ width: '48px', height: '48px' }}
+                      />
+                    )}
+                    <div>
+                      <p className="win95-text" style={{ fontWeight: 'bold', color: 'var(--win95-accent)', marginBottom: '2px' }}>
                         {identity.name}
-                      </h2>
-                      <p className="text-body">{identity.scenario.profession}</p>
-                      {identity.generatedPersona && (
-                        <span className="badge badge-primary mt-2">{identity.generatedPersona.type}</span>
-                      )}
+                      </p>
+                      <p className="win95-text" style={{ fontSize: '14px' }}>{identity.scenario.profession}</p>
                     </div>
                   </div>
 
-                  <div className="mb-4">
-                    <h3 className="text-caption mb-2">Background</h3>
-                    <ul className="space-y-2">
+                  <div style={{ marginBottom: '8px' }}>
+                    <p className="win95-text" style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '4px' }}>Background:</p>
+                    <ul style={{ margin: 0, paddingLeft: '16px' }}>
                       {identity.scenario.briefBackground?.map((bullet, idx) => (
-                        <li key={idx} className="flex gap-2 text-body">
-                          <span style={{ color: 'var(--color-primary)' }}>•</span>
-                          {bullet}
+                        <li key={idx} className="win95-text" style={{ fontSize: '13px' }}>
+                          {cleanupAIText(bullet)}
                         </li>
                       ))}
                     </ul>
                   </div>
 
                   <div>
-                    <h3 className="text-caption mb-2">Current Situation</h3>
-                    <ul className="space-y-2">
+                    <p className="win95-text" style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '4px' }}>Current Situation:</p>
+                    <ul style={{ margin: 0, paddingLeft: '16px' }}>
                       {identity.scenario.currentStory?.map((bullet, idx) => (
-                        <li key={idx} className="flex gap-2 text-body">
-                          <span style={{ color: 'var(--color-primary)' }}>•</span>
-                          {bullet}
+                        <li key={idx} className="win95-text" style={{ fontSize: '13px' }}>
+                          {cleanupAIText(bullet)}
                         </li>
                       ))}
                     </ul>
@@ -703,52 +886,49 @@ function CreatePageContent() {
               {carouselIndex > 0 && identity.npcs[carouselIndex - 1] && (() => {
                 const npc = identity.npcs[carouselIndex - 1];
                 return (
-                  <div className="card mb-6">
-                    <div className="flex gap-4 mb-4 pb-4" style={{ borderBottom: '1px solid var(--color-surface)' }}>
-                      <div className="avatar avatar-lg">
-                        {npc.pixelArtUrl && (
-                          <img
-                            src={npc.pixelArtUrl}
-                            alt={npc.name}
-                            className="sprite"
-                            style={{ width: '64px', height: '64px' }}
-                          />
-                        )}
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-caption">{npc.role}</p>
-                        <h2 className="text-h2" style={{ color: 'var(--color-primary)' }}>
+                  <div className="win95-groupbox" style={{ marginBottom: '16px' }}>
+                    <span className="win95-groupbox-label">{npc.role}</span>
+                    <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+                      {npc.pixelArtUrl && (
+                        <img
+                          src={npc.pixelArtUrl}
+                          alt={npc.name}
+                          className="sprite"
+                          style={{ width: '48px', height: '48px' }}
+                        />
+                      )}
+                      <div>
+                        <p className="win95-text" style={{ fontWeight: 'bold', color: 'var(--win95-accent)', marginBottom: '2px' }}>
                           {npc.name}
-                        </h2>
-                        <div className="flex gap-2 mt-2">
-                          <span className={`badge ${npc.tier === 'core' ? 'badge-primary' : 'badge-secondary'}`}>
-                            {npc.tier === 'core' ? '★ Core' : '○ Secondary'}
-                          </span>
-                        </div>
+                        </p>
+                        <p className="win95-text" style={{ fontSize: '14px' }}>
+                          {npc.tier === 'core' ? '★ Core Character' : '○ Secondary Character'}
+                        </p>
                       </div>
                     </div>
 
-                    <div className="mb-4">
-                      <h3 className="text-caption mb-2">About {npc.name}</h3>
-                      <ul className="space-y-2">
+                    <div style={{ marginBottom: '8px' }}>
+                      <p className="win95-text" style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '4px' }}>About {npc.name}:</p>
+                      <ul style={{ margin: 0, paddingLeft: '16px' }}>
                         {npc.bullets?.map((bullet, idx) => (
-                          <li key={idx} className="flex gap-2 text-body">
-                            <span style={{ color: 'var(--color-primary)' }}>•</span>
-                            {bullet}
+                          <li key={idx} className="win95-text" style={{ fontSize: '13px' }}>
+                            {cleanupAIText(bullet)}
                           </li>
                         ))}
                       </ul>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="card-flat p-3">
-                        <p className="text-caption">Relationship</p>
-                        <p className="text-body">{npc.relationshipStatus}</p>
+                    <div style={{ display: 'flex', gap: '16px' }}>
+                      <div>
+                        <p className="win95-text" style={{ fontSize: '12px', color: 'var(--win95-text-dim)' }}>Relationship</p>
+                        <p className="win95-text" style={{ fontSize: '14px' }}>
+                          {npc.relationshipStatus.charAt(0).toUpperCase() + npc.relationshipStatus.slice(1)}
+                        </p>
                       </div>
-                      <div className="card-flat p-3">
-                        <p className="text-caption">Mood</p>
-                        <p className="text-body" style={{ textTransform: 'capitalize' }}>
-                          {npc.currentEmotionalState}
+                      <div>
+                        <p className="win95-text" style={{ fontSize: '12px', color: 'var(--win95-text-dim)' }}>Mood</p>
+                        <p className="win95-text" style={{ fontSize: '14px' }}>
+                          {npc.currentEmotionalState.charAt(0).toUpperCase() + npc.currentEmotionalState.slice(1)}
                         </p>
                       </div>
                     </div>
@@ -757,47 +937,40 @@ function CreatePageContent() {
               })()}
 
               {/* Page Dots */}
-              <div className="flex justify-center gap-2 mb-6">
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '4px', marginBottom: '16px' }}>
                 {[0, ...identity.npcs.map((_, i) => i + 1)].map((idx) => (
                   <button
                     key={idx}
                     onClick={() => setCarouselIndex(idx)}
-                    className="transition-all"
                     style={{
-                      width: idx === carouselIndex ? '24px' : '8px',
+                      width: idx === carouselIndex ? '20px' : '8px',
                       height: '8px',
-                      borderRadius: '4px',
-                      background: idx === carouselIndex ? 'var(--color-primary)' : 'var(--color-surface)',
+                      border: 'none',
+                      background: idx === carouselIndex ? 'var(--win95-accent)' : 'var(--win95-dark)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
                     }}
                     aria-label={idx === 0 ? 'You' : `NPC ${idx}`}
                   />
                 ))}
               </div>
 
-              <button onClick={handleEnterGame} className="btn btn-primary btn-lg w-full">
-                Enter Your Life →
+              <button
+                onClick={handleEnterGame}
+                className="win95-btn"
+                style={{
+                  width: '100%',
+                  padding: '10px 20px',
+                  background: 'var(--win95-accent)',
+                  color: 'white',
+                  fontWeight: 'bold',
+                }}
+              >
+                Enter Your Life
               </button>
             </div>
           )}
         </div>
-      </div>
-
-      {/* Step indicator */}
-      <div className="mt-6 flex items-center gap-3">
-        <div
-          className="h-2 rounded-full transition-all"
-          style={{
-            width: step === 'difficulty' || step === 'character' ? '48px' : '24px',
-            background: 'var(--color-primary)',
-          }}
-        />
-        <div
-          className="h-2 rounded-full transition-all"
-          style={{
-            width: step === 'loading' || step === 'complete' ? '48px' : '24px',
-            background: step === 'loading' || step === 'complete' ? 'var(--color-primary)' : 'var(--color-surface)',
-          }}
-        />
       </div>
     </main>
   );
@@ -807,10 +980,9 @@ export default function CreatePage() {
   return (
     <Suspense
       fallback={
-        <main className="min-h-screen flex flex-center">
-          <div className="flex flex-center gap-sm">
-            <div className="loading-spinner" />
-            <span className="text-body text-muted">Loading</span>
+        <main className="min-h-screen flex flex-center" style={{ background: 'var(--win95-bg)' }}>
+          <div className="win95-window" style={{ padding: '24px' }}>
+            <span className="win95-text win95-loading">Loading</span>
           </div>
         </main>
       }

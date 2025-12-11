@@ -18,7 +18,7 @@ export function PrivyProvider({ children }: PrivyProviderProps) {
           theme: 'dark',
           accentColor: '#715aff',
         },
-        loginMethods: ['email', 'wallet'],
+        loginMethods: ['google', 'email', 'wallet'],
       }}
     >
       {children}

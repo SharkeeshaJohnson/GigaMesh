@@ -84,6 +84,18 @@ export interface GeneratedPersona {
   situation: string; // Current life situation
 }
 
+/**
+ * Player action - tracks things the player has said/done for butterfly effect
+ * NPCs can reference these in future conversations
+ */
+export interface PlayerAction {
+  id: string;
+  day: number;
+  content: string; // What the player said/did
+  context: string; // Brief context (who they said it to, what conversation)
+  timestamp: Date;
+}
+
 export interface Identity {
   id: string;
   slotIndex: number; // 0-3 (4 save slots)
@@ -98,6 +110,7 @@ export interface Identity {
   npcs: NPC[]; // Starting NPCs (more can spawn through gameplay)
   storySeeds?: StorySeed[]; // Legacy: simple story seeds (deprecated, use narrativeState)
   narrativeState?: NarrativeState; // Full narrative engine state
+  playerActions?: PlayerAction[]; // NEW: Things player has said/done (butterfly effect)
   pixelArtUrl?: string; // Player character sprite URL
   spriteIndex?: number; // Index of selected sprite (visual only, not gameplay)
   createdAt: Date;

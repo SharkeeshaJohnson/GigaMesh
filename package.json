@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@privy-io/react-auth": "^3.8.1",
-    "@reverbia/sdk": "^1.0.0-next.20251209143100",
+    "@reverbia/sdk": "^1.0.0-next.20251211090814",
     "@solana-program/system": "^0.10.0",
     "dexie": "^4.2.1",
     "gsap": "^3.14.1",
