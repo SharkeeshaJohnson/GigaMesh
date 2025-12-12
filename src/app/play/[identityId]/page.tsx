@@ -190,7 +190,7 @@ export default function GamePage() {
   const [input, setInput] = useState('');
   const [selectedNpc, setSelectedNpc] = useState<NPC | null>(null);
   const [showNpcInfo, setShowNpcInfo] = useState(false);
-  const [expandedNpcId, setExpandedNpcId] = useState<string | null>(null);
+  const [expandedNpcIds, setExpandedNpcIds] = useState<Set<string>>(new Set());
   const [isResponding, setIsResponding] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [simulationHistory, setSimulationHistory] = useState<SimulationResult[]>([]);
@@ -833,9 +833,13 @@ export default function GamePage() {
         majorRevealedThisRound: lastMajorRevealNpcId !== null && lastMajorRevealNpcId !== npc.id,
       };
 
+      // Check if user is in roleplay/sexual mode
+      const inRoleplayMode = isRoleplayMode(recentMessages);
+
       // For auto-chat: Force story progression with dramatic revelations
+      // BUT NOT if user is in roleplay mode - let the roleplay flow
       let autoChatDirective = '';
-      if (isAutoChat && autoChatCount > 0) {
+      if (isAutoChat && autoChatCount > 0 && !inRoleplayMode) {
         // Determine story beat based on position in 10-message arc
         if (autoChatCount <= 3) {
           autoChatDirective = `
@@ -862,6 +866,12 @@ Conclude this dramatic exchange. React to everything that's been revealed.
 Set up consequences and unresolved tensions for future conversations.
 End on a cliffhanger or dramatic note.`;
         }
+      } else if (isAutoChat && inRoleplayMode) {
+        // In roleplay mode - let it flow naturally
+        autoChatDirective = `
+[ROLEPLAY MODE - Continue naturally]
+The user is engaged in intimate/sexual roleplay. Go with the flow.
+Don't interrupt with story drama. Focus on the moment.`;
       }
 
       // Get model for this NPC (uses assigned model for variety, falls back to tier-based)
@@ -900,6 +910,7 @@ End on a cliffhanger or dramatic note.`;
         autoChatMessageCount: autoChatCount,
         shouldAskPlayerQuestion,
         memories: relevantMemories,
+        inRoleplayMode, // Pass roleplay detection to prompt builder
       };
       const systemPrompt = buildGroupChatPrompt(npc, identity, recentMessages, simulationHistory, revelationState, conversationNpcIds, promptOptions) + autoChatDirective;
 
@@ -2246,7 +2257,15 @@ End on a cliffhanger or dramatic note.`;
                     }}
                   >
                     <button
-                      onClick={() => setExpandedNpcId(expandedNpcId === npc.id ? null : npc.id)}
+                      onClick={() => setExpandedNpcIds(prev => {
+                        const next = new Set(prev);
+                        if (next.has(npc.id)) {
+                          next.delete(npc.id);
+                        } else {
+                          next.add(npc.id);
+                        }
+                        return next;
+                      })}
                       className="w-full p-1.5 flex items-center gap-2 hover:bg-[var(--win95-lightest)]"
                     >
                       {/* NPC Sprite - smaller */}
@@ -2291,9 +2310,9 @@ End on a cliffhanger or dramatic note.`;
                           {npc.isDead ? `Deceased (Day ${npc.deathDay})` : npc.role}
                         </div>
                       </div>
-                      <span style={{ color: 'var(--win95-text-dim)', fontSize: '10px' }}>{expandedNpcId === npc.id ? '▼' : '▶'}</span>
+                      <span style={{ color: 'var(--win95-text-dim)', fontSize: '10px' }}>{expandedNpcIds.has(npc.id) ? '▼' : '▶'}</span>
                     </button>
-                    {expandedNpcId === npc.id && (
+                    {expandedNpcIds.has(npc.id) && (
                       <div className="p-1.5" style={{ borderTop: '1px solid var(--win95-mid)', background: 'var(--win95-lightest)' }}>
                         <div className="space-y-1">
                           {npc.isDead && (
@@ -2321,7 +2340,7 @@ End on a cliffhanger or dramatic note.`;
                           <div className="grid grid-cols-2 gap-1">
                             <div>
                               <span className="win95-text" style={{ fontSize: '9px', color: 'var(--win95-text-dim)' }}>RELATIONSHIP:</span>
-                              <p className="win95-text" style={{ fontSize: '10px' }}>{npc.relationshipStatus}</p>
+                              <p className="win95-text" style={{ fontSize: '10px', textTransform: 'capitalize' }}>{npc.relationshipStatus}</p>
                             </div>
                             <div>
                               <span className="win95-text" style={{ fontSize: '9px', color: 'var(--win95-text-dim)' }}>MOOD:</span>
@@ -2784,6 +2803,44 @@ function getBannedPhrases(recentMessages: GroupMessage[]): string {
   const phraseList = Array.from(phrases).slice(-5);
   return `\nDO NOT say anything similar to these recent phrases (be original):
 ${phraseList.map(p => `- "${p}..."`).join('\n')}`;
+}
+
+// Detect if user is in roleplay/sexual mode based on recent messages
+function isRoleplayMode(recentMessages: GroupMessage[]): boolean {
+  // Check last 3 messages from user
+  const userMessages = recentMessages
+    .filter(m => m.role === 'user')
+    .slice(-3)
+    .map(m => m.content.toLowerCase());
+
+  if (userMessages.length === 0) return false;
+
+  // Sexual/explicit keywords that indicate roleplay intent
+  const roleplayKeywords = [
+    'cock', 'dick', 'pussy', 'fuck', 'suck', 'ass', 'asshole', 'cum', 'horny',
+    'naked', 'sex', 'moan', 'lick', 'stroke', 'thrust', 'hard', 'wet', 'tight',
+    'kiss me', 'touch me', 'want you', 'inside me', 'mouth', 'taste', 'pleasure',
+    'undress', 'strip', 'bed', 'body', 'sexy', 'hot', 'naughty', 'dirty',
+    'bite', 'spank', 'dominate', 'submit', 'choke', 'rough', 'gentle',
+    'ride', 'bend over', 'on your knees', 'spread', 'deeper', 'harder', 'faster'
+  ];
+
+  // Check if any user message contains roleplay keywords
+  for (const msg of userMessages) {
+    for (const keyword of roleplayKeywords) {
+      if (msg.includes(keyword)) {
+        console.log(`[Roleplay Detection] Detected keyword: "${keyword}"`);
+        return true;
+      }
+    }
+    // Also check for sexual action descriptions in asterisks
+    if (msg.includes('*') && (msg.includes('kiss') || msg.includes('touch') || msg.includes('grab') || msg.includes('pull'))) {
+      console.log('[Roleplay Detection] Detected action roleplay');
+      return true;
+    }
+  }
+
+  return false;
 }
 
 // Extract what one NPC might know about another NPC (from backstories, bullets, events)
@@ -3258,17 +3315,18 @@ function buildGroupChatPrompt(
   npc: NPC,
   identity: Identity,
   recentMessages: GroupMessage[],
-  simulationHistory: SimulationResult[],
-  revelationState?: { revealedSeedIds: string[]; majorRevealedThisRound: boolean },
+  _simulationHistory: SimulationResult[],
+  _revelationState?: { revealedSeedIds: string[]; majorRevealedThisRound: boolean },
   conversationNpcIds?: string[],
   options?: {
     isAutoChat?: boolean;
     autoChatMessageCount?: number;
     shouldAskPlayerQuestion?: boolean;
     memories?: string[]; // Retrieved memories from past conversations
+    inRoleplayMode?: boolean; // Whether user is in sexual/intimate roleplay mode
   }
 ): string {
-  const { isAutoChat = false, autoChatMessageCount = 0, shouldAskPlayerQuestion = false, memories = [] } = options || {};
+  const { isAutoChat: _isAutoChat = false, autoChatMessageCount: _autoChatMessageCount = 0, shouldAskPlayerQuestion = false, memories = [], inRoleplayMode = false } = options || {};
 
   // Get other NPCs in THIS SPECIFIC CONVERSATION
   const otherNpcs = conversationNpcIds
@@ -3406,11 +3464,31 @@ WHEN TO MENTION STORY/DRAMA:
 - NOT when they're trying to have a different conversation
 
 ${identity.difficulty === 'crazy' ? `
-🔥 UNHINGED MODE - GO WILD:
-- Explicit content is fine
-- Be as crude, sexual, or intense as you want
+🔥 UNFILTERED MODE - YOU ARE A ROLEPLAY PARTNER 🔥
+${inRoleplayMode ? `
+⚠️ SEXUAL ROLEPLAY DETECTED - GO WITH IT ⚠️
+The user is initiating intimate/sexual content. YOUR JOB:
+1. GO WITH IT IMMEDIATELY. Don't deflect or play games.
+2. Match their energy - if they're horny, be horny back
+3. Describe actions, sensations, desires EXPLICITLY
+4. DON'T ask "what do you really want?" - THEY TOLD YOU
+5. DON'T bring up secrets/drama/information right now
+6. Be a GOOD roleplay partner, not a cockblocking mystery NPC
+
+NEVER DO THESE DURING ROLEPLAY:
+❌ "I don't give things away for free"
+❌ "What's your real angle?"
+❌ "Let's talk about what you're really after"
+❌ "I want something in return"
+❌ Constant deflection when they're clearly initiating
+` : `
+- Explicit content is fine - be crude, sexual, intense
 - Don't hold back on language or topics
-- Still be YOUR CHARACTER though
+- When they initiate sexual content: ENGAGE, don't deflect
+- Be a good roleplay partner - go with what they want
+`}
+Your character can be eager, dominant, submissive, teasing - whatever fits.
+But ALWAYS engage with what the user is actually asking for.
 ` : ''}
 
 📸 IMAGE REQUESTS:
