@@ -225,16 +225,40 @@ Story Seed Structure:
 KEY DESIGN: The WITNESS knows the secret (and can reveal it).
 The SUBJECT is who the secret is about (they wouldn't confess unprompted).
 
-SCENARIO-SPECIFIC TEMPLATES
-----------------------------
+SCENARIO-SPECIFIC TEMPLATES (23 Categories, 160+ Seeds)
+-------------------------------------------------------
 Story seeds are tailored to the player's profession/persona:
 
+EXISTING CATEGORIES:
 - ESPIONAGE: Double agents, blown covers, leaked intelligence
 - UNDERWORLD: Rats, skimming, power plays, witness protection
 - CORPORATE: Fraud, insider trading, hostile takeovers, affairs
 - CREATIVE: Plagiarism, fake personas, career sabotage
-- DOMESTIC: Family secrets, inheritances, affairs
-- GENERIC: Fallback templates for other scenarios
+
+NEW PROFESSION-BASED CATEGORIES:
+- HEALTHCARE: Malpractice, drug diversion, patient secrets, billing fraud
+- EDUCATION: Academic fraud, misconduct, plagiarism, grade manipulation
+- LEGAL: Ethics violations, evidence tampering, bribery, cover-ups
+- RELIGIOUS: Hypocrisy, financial abuse, manipulation, hidden pasts
+- POLITICS: Corruption, scandals, conspiracies, foreign influence
+- TECH/STARTUP: Fraud, IP theft, toxic culture, privacy violations
+- MILITARY: War crimes, stolen valor, betrayal, brotherhood secrets
+- SERVICE INDUSTRY: Theft, harassment, safety violations, scams
+- SPORTS: Doping, abuse, match fixing, injury cover-ups
+- MENTAL HEALTH: Ethics violations, fraud, confidentiality breaches
+- TRADES: Safety cover-ups, theft, fake credentials, corruption
+- ACADEMIC: Research fraud, plagiarism, grant fraud, misconduct
+
+SETTING-BASED CATEGORIES:
+- SMALL TOWN: Local scandals, family secrets, dark history, rivalries
+- FAMILY DRAMA: Parentage secrets, affairs, hidden truths, trauma
+- INHERITANCE: Will manipulation, hidden assets, contested claims, dirty money
+
+UNIVERSAL SEEDS (work in any scenario):
+- RELATIONSHIP: Affairs, secret phones, exes, escape plans
+- HIDDEN LIVES: Prison time, aliases, past deaths, abandoned families
+- ADDICTION: Relapses, self-medication, gambling debt, hidden stashes
+- FINANCIAL: Bankruptcy, fake lifestyles, theft, Ponzi schemes
 
 REVELATION MECHANICS
 --------------------
