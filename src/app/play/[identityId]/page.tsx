@@ -2812,13 +2812,30 @@ function formatMessageContent(content: string): React.ReactNode {
 
   return parts.map((part, index) => {
     if (part.startsWith('*') && part.endsWith('*')) {
-      // Extract action text WITHOUT asterisks, show as italic - more compact
+      // Extract action text WITHOUT asterisks, show as italic
       const actionText = part.slice(1, -1);
-      return (
-        <span key={index} className="block my-0.5 italic" style={{ color: 'var(--win95-text-dim)', fontSize: '11px' }}>
-          {actionText}
-        </span>
-      );
+
+      // Determine if this is a full action (sentence-like) or inline emphasis
+      // Full actions: contain spaces and describe actions (put on their own line)
+      // Inline emphasis: single words or short phrases mid-sentence (keep inline)
+      const wordCount = actionText.trim().split(/\s+/).length;
+      const isFullAction = wordCount >= 4 || actionText.includes(' and ') || actionText.includes(' then ');
+
+      if (isFullAction) {
+        // Full action description - display as block
+        return (
+          <span key={index} className="block my-0.5 italic" style={{ color: 'var(--win95-text-dim)', fontSize: '11px' }}>
+            {actionText}
+          </span>
+        );
+      } else {
+        // Inline emphasis - keep inline with surrounding text
+        return (
+          <span key={index} className="italic" style={{ color: 'var(--win95-text-dim)' }}>
+            {actionText}
+          </span>
+        );
+      }
     }
     // Trim whitespace and remove surrounding quotes from dialogue
     let trimmedPart = part.trim();
