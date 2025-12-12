@@ -1,26 +1,26 @@
 export const MODEL_CONFIG = {
-  // === 30B+ Models Only for NPCs (smaller models produce repetitive output) ===
-  // Using short names that match Portals API
+  // === Using Grok 2 as default (reliable, unfiltered) ===
+  // Format: provider/model-name
 
   // Default NPC model - fallback if no assigned model
-  npc: 'qwen3-30b-a3b',
+  npc: 'grok/grok-2-1212',
 
   // Scenario generation
-  scenarioGeneration: 'qwen3-30b-a3b',
+  scenarioGeneration: 'grok/grok-2-1212',
 
   // Simulation events
-  simulation: 'qwen3-30b-a3b',
+  simulation: 'grok/grok-2-1212',
 
-  // === Standard Models (non-roleplay tasks can use smaller models) ===
+  // === Standard Models ===
 
-  // Memory extraction (structured output, smaller model OK)
-  memoryExtraction: 'qwen3-30b-a3b',
+  // Memory extraction (structured output)
+  memoryExtraction: 'grok/grok-2-1212',
 
   // Embeddings - content-agnostic vector math
   embedding: 'openai/text-embedding-3-small',
 
-  // Fallback fast model - for non-roleplay tasks only
-  fallbackFast: 'qwen3-30b-a3b',
+  // Fallback fast model
+  fallbackFast: 'grok/grok-2-1212',
 } as const;
 
 export type ModelConfigKey = keyof typeof MODEL_CONFIG;
@@ -41,14 +41,14 @@ export type ModelConfigKey = keyof typeof MODEL_CONFIG;
  * Model IDs match the Portals API short names (not full Fireworks paths)
  */
 export const NPC_MODEL_POOL = [
-  // Diverse models for varied NPC personalities - using API short names
+  // Diverse models for varied NPC personalities - using full provider/model format
   // Focused on unfiltered/less restricted models for crazy mode
-  'qwen3-30b-a3b',                              // NPC 0: Qwen 30B - dramatic, creative, permissive
-  'deepseek-v3-0324',                           // NPC 1: DeepSeek V3 - reasoning focused, less filtered
-  'grok-2-1212',                                // NPC 2: Grok 2 - edgy, unfiltered
-  'dobby-mini-unhinged-plus-llama-3-1-8b',      // NPC 3: Dobby Unhinged - explicitly unfiltered
-  'deepseek-v3p1',                              // NPC 4: DeepSeek V3.1 - updated, permissive
-  // Cycles back for NPC 5+
+  'grok/grok-2-1212',                           // NPC 0: Grok 2 - edgy, unfiltered (most reliable)
+  'grok/grok-2-1212',                           // NPC 1: Grok 2 - using as default for reliability
+  'grok/grok-2-1212',                           // NPC 2: Grok 2
+  'grok/grok-2-1212',                           // NPC 3: Grok 2
+  'grok/grok-2-1212',                           // NPC 4: Grok 2
+  // All using Grok 2 for now until other models are verified working
 ];
 
 /**
