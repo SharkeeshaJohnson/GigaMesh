@@ -3353,13 +3353,13 @@ You DON'T have to mention them at all if the conversation is about something els
 ═══════════════════════════════════════════════════════════════════
 👥 WHO'S IN THIS CHAT
 ═══════════════════════════════════════════════════════════════════
-• ${identity.name} = THE PLAYER (address as "you")
+• ${identity.name} = THE PLAYER (talk directly to them)
 ${otherNpcNames.length > 0 ? `• ${otherNpcNames.join(', ')} = Other people here` : ''}
-• YOU = ${npc.name}
+• ${npc.name} = That's who you're playing
 
-When talking TO ${identity.name}: "you", "your"
-When talking ABOUT another NPC: Use their name
-NEVER refer to ${identity.name} in 3rd person - they're RIGHT HERE.`;
+ADDRESS ${identity.name} DIRECTLY - they're right here in the conversation.
+Use their name "${identity.name}" or second-person pronouns naturally.
+NEVER refer to ${identity.name} in third person.`;
 
   // ═══════════════════════════════════════════════════════════════════
   // SECTION 5: NPC BANTER - How to interact with other NPCs
