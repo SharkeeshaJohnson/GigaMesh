@@ -14,7 +14,10 @@ import {
   generateStorySeeds,
   markSeedRevealed,
   StorySeed,
+  getActiveStorySummary,
+  getRelevantFactsForNPC,
 } from '@/lib/narrative';
+import { buildSafetyPreamble, getNPCBehaviorGuidelines } from '@/lib/content-filter';
 
 // Persona to sprite mapping for migration (matches create page CHARACTER_SPRITES)
 const PERSONA_SPRITE_MAP: Record<string, string> = {
@@ -451,6 +454,15 @@ export default function GamePage() {
             console.log(`[Migration] Generated ${newSeeds.length} story seeds for narrative engine`);
           }
 
+          // Migration: Initialize narrativeState for existing saves that don't have it
+          // This populates relationships, globalTension, worldFacts, etc.
+          if (!loadedIdentity.narrativeState) {
+            const { initializeNarrativeForNewGame } = await import('@/lib/narrative');
+            loadedIdentity.narrativeState = initializeNarrativeForNewGame(loadedIdentity);
+            needsSave = true;
+            console.log(`[Migration] Initialized narrativeState with ${loadedIdentity.narrativeState.relationships.length} relationships, globalTension: ${loadedIdentity.narrativeState.globalTension}`);
+          }
+
           // Note: Model assignment is handled by a separate useEffect that waits for models to load
 
           await saveToIndexedDB('identities', loadedIdentity);
@@ -601,7 +613,7 @@ export default function GamePage() {
     saveConversation();
   }, [messages, conversationId, identity]);
 
-  // Auto-conversation effect - NPCs respond to each other (capped at 10 messages)
+  // Auto-conversation effect - NPCs respond to each other (capped at 2 messages)
   useEffect(() => {
     // Must have auto-converse enabled and not already responding
     if (!autoConverse || isResponding || !identity || messages.length === 0) return;
@@ -614,8 +626,8 @@ export default function GamePage() {
     const conversationNpcIds = currentConv?.npcIds || identity.npcs.map(n => n.id);
     const autoChatCount = currentConv?.autoChatMessageCount || 0;
 
-    // Check if we've hit the 10 message cap
-    if (autoChatCount >= 10) {
+    // Check if we've hit the 2 message cap (reduced for faster progression)
+    if (autoChatCount >= 2) {
       // Auto-stop auto-chat
       setAllConversations(prev => prev.map(c =>
         c.id === conversationId
@@ -833,8 +845,9 @@ export default function GamePage() {
     }
 
     try {
-      // Build context from recent messages - limit to last 6 to reduce tokens
-      const recentMessages = messages.slice(-6);
+      // Build context from recent messages - increased to 15 for better NPC memory
+      // This prevents NPCs from repeating themselves by giving them more conversation history
+      const recentMessages = messages.slice(-15);
 
       // Get current conversation info for auto-chat story progression
       const currentConv = allConversations.find(c => c.id === conversationId);
@@ -857,59 +870,54 @@ export default function GamePage() {
       const otherNames = otherNpcIds.map(id => identity.npcs.find(n => n.id === id)?.name).filter(Boolean).join(', ');
 
       if (isAutoChat && !inRoleplayMode && currentSeed) {
-        // NPC has a secret to reveal - phase-specific directive
-        if (autoChatCount <= 3) {
-          // TENSION PHASE: Hint but don't reveal
+        // NPC has a secret to reveal - 2 messages total
+        if (autoChatCount === 1) {
+          // Message 1: Let something slip
           autoChatDirective = `
 [YOUR SECRET]
-You know: "${currentSeed.fact}"
+"${currentSeed.fact}"
 
-[PHASE: TENSION - Message ${autoChatCount}/10]
-DON'T reveal this yet. Instead:
-- Drop hints that make people nervous
-- Be mysterious about what you know
-- React with knowing looks and loaded silences
-- Make veiled references without specifics
-Other characters present: ${otherNames}`;
-        } else if (autoChatCount <= 6) {
-          // ESCALATION PHASE: Get closer to revealing
-          autoChatDirective = `
-[YOUR SECRET]
-You know: "${currentSeed.fact}"
-
-[PHASE: ESCALATION - Message ${autoChatCount}/10]
-Getting closer to revealing:
-- Make pointed accusations
-- Ask leading questions that corner them
-- Let them know you're watching
-- Show that you know more than you're saying`;
-        } else if (autoChatCount <= 9) {
-          // REVELATION PHASE: Say it clearly
+[MESSAGE 1/2 - LET IT SLIP]
+Reference something SPECIFIC from your secret during conversation:
+- "Speaking of that... did you know [specific detail from secret]?"
+- "That reminds me - I heard that [part of secret]..."
+Use REAL DETAILS from the secret above. Don't be vague.
+Other people here: ${otherNames}`;
+        } else {
+          // Message 2: Full reveal
           autoChatDirective = `
 [REVEAL THIS NOW]
 "${currentSeed.fact}"
 
-[PHASE: REVELATION - Message ${autoChatCount}/10]
-Say it clearly. Use names. Be specific.
-This is your moment to expose the truth.
-Don't be vague - state exactly what you know.`;
-        } else {
-          // CONCLUSION PHASE
-          autoChatDirective = `
-[PHASE: CONCLUSION - Message ${autoChatCount}/10]
-The revelation has happened. Now:
-- React to the fallout
-- Set up consequences
-- End on a cliffhanger or dramatic note`;
+[MESSAGE 2/2 - SAY IT ALL]
+State the full secret clearly:
+- Use actual names
+- Give ALL the details
+- Say how you found out
+- Express how you FEEL (angry? worried? amused?)
+Be direct. This is your moment.`;
         }
       } else if (isAutoChat && !inRoleplayMode && !currentSeed) {
-        // NPC has no secrets - react to others
+        // NPC has no secrets - be a normal person, not a dramatic reactor
+        const normalTopics = [
+          `complain about your day`,
+          `gossip about someone not in this chat`,
+          `share a random opinion`,
+          `make a joke or tease someone`,
+          `ask ${identity.name} about their plans`,
+          `bring up something from your past`,
+        ];
+        const randomTopic = normalTopics[Math.floor(Math.random() * normalTopics.length)];
+
         autoChatDirective = `
-[REACT MODE - Message ${autoChatCount}/10]
-You don't have secrets to reveal right now.
-React to what others are saying. Ask questions.
-Be emotionally present. Don't make things up.
-Other characters present: ${otherNames}`;
+[MESSAGE ${autoChatCount} - JUST BE NORMAL]
+You don't have any secrets to reveal. Be a regular person:
+- ${randomTopic}
+- React genuinely to what others say (agree, disagree, laugh, eye-roll)
+- If others are being dramatic, you can be skeptical or change the subject
+- Ask real questions, make real comments
+- DON'T act mysterious - you have nothing to be mysterious about
+Other people here: ${otherNames}`;
       } else if (isAutoChat && inRoleplayMode) {
         // In roleplay mode - let it flow naturally
         autoChatDirective = `
@@ -970,7 +978,7 @@ Don't interrupt with story drama. Focus on the moment.`;
         }));
       const combinedRecentMessages = [...recentMessages, ...recentFromRefForPrompt];
 
-      const systemPrompt = buildGroupChatPrompt(npc, identity, combinedRecentMessages, simulationHistory, conversationNpcIds, promptOptions) + autoChatDirective;
+      const systemPrompt = buildGroupChatPrompt(npc, identity, combinedRecentMessages, conversationNpcIds, promptOptions) + autoChatDirective;
 
       // Build messages for API - CRITICAL: Only mark messages as 'assistant' if from THIS NPC
       // Other NPCs' messages should be 'user' role to avoid confusing the model
@@ -1535,6 +1543,53 @@ Don't interrupt with story drama. Focus on the moment.`;
                 <PixelMeter label="Mental" value={identity.meters.mentalHealth} iconClass="pixel-icon-brain" />
               </div>
             </div>
+
+            {/* Global Tension - Narrative Engine */}
+            {identity.narrativeState && (
+              <div className="win95-groupbox mt-2">
+                <span className="win95-groupbox-label">Drama</span>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span style={{ fontSize: '14px' }}>
+                      {identity.narrativeState.globalTension >= 80 ? '🔥' :
+                       identity.narrativeState.globalTension >= 60 ? '⚡' :
+                       identity.narrativeState.globalTension >= 40 ? '⚠️' : '😌'}
+                    </span>
+                    <div className="flex-1">
+                      <div className="flex justify-between mb-0.5">
+                        <span className="win95-text" style={{ fontSize: '10px' }}>Tension</span>
+                        <span className="win95-text" style={{ fontSize: '10px', fontWeight: 'bold' }}>
+                          {identity.narrativeState.globalTension}
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          width: '100%',
+                          height: '8px',
+                          background: 'var(--win95-dark)',
+                          border: '1px solid var(--win95-border-dark)',
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: `${identity.narrativeState.globalTension}%`,
+                            height: '100%',
+                            background: identity.narrativeState.globalTension >= 80 ? '#dc2626' :
+                                       identity.narrativeState.globalTension >= 60 ? '#ea580c' :
+                                       identity.narrativeState.globalTension >= 40 ? '#ca8a04' : '#16a34a',
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="win95-text" style={{ fontSize: '9px', color: 'var(--win95-text-dim)', marginTop: '2px' }}>
+                    {identity.narrativeState.globalTension >= 80 ? 'Critical - Everyone on edge' :
+                     identity.narrativeState.globalTension >= 60 ? 'High - Drama brewing' :
+                     identity.narrativeState.globalTension >= 40 ? 'Moderate - Some undercurrents' : 'Low - Things are calm'}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* CTA Buttons - Actions and Simulate */}
@@ -1793,12 +1848,13 @@ Don't interrupt with story drama. Focus on the moment.`;
                   {/* Gallery Button */}
                   <button
                     onClick={() => setShowGallery(true)}
-                    className="py-0.5 px-2 flex items-center gap-1"
+                    className="py-0.5 px-2 flex items-center justify-center gap-1"
                     style={{
                       background: 'var(--win95-light)',
                       border: '1px solid var(--win95-border-dark)',
                       fontSize: '10px',
                       color: 'var(--win95-text)',
+                      minWidth: '90px',
                     }}
                     title="View image gallery"
                   >
@@ -1831,12 +1887,13 @@ Don't interrupt with story drama. Focus on the moment.`;
                           setAutoChatPausedForPlayer(false); // Clear pause state
                         }
                       }}
-                      className="py-0.5 px-2 flex items-center gap-1"
+                      className="py-0.5 px-2 flex items-center justify-center gap-1"
                       style={{
                         background: autoConverse ? 'var(--win95-accent)' : 'var(--win95-light)',
                         border: '1px solid var(--win95-border-dark)',
                         fontSize: '10px',
                         color: autoConverse ? 'white' : 'var(--win95-text)',
+                        minWidth: '90px',
                       }}
                     >
                       <span>Auto-chat</span>
@@ -1965,7 +2022,7 @@ Don't interrupt with story drama. Focus on the moment.`;
                       Watch the drama unfold as characters reveal secrets, confront each other, and advance the story.
                     </p>
                     <ul className="win95-text text-left" style={{ fontSize: '10px', lineHeight: '1.6', paddingLeft: '24px', marginBottom: '12px' }}>
-                      <li>• Limited to <strong>10 messages</strong> per session</li>
+                      <li>• Limited to <strong>2 messages</strong> per session</li>
                       <li>• Story will progress dramatically</li>
                       <li>• NPCs will remember this conversation</li>
                       <li>• Click the button again to stop early</li>
@@ -1997,7 +2054,7 @@ Don't interrupt with story drama. Focus on the moment.`;
                       The conversation has reached its climax!
                     </p>
                     <p className="win95-text" style={{ fontSize: '11px', lineHeight: '1.4', marginBottom: '12px' }}>
-                      10 messages exchanged. The NPCs have revealed secrets and advanced the story. Their memories of this conversation will carry over to future chats.
+                      NPCs have revealed secrets and advanced the story. Their memories of this conversation will carry over to future chats.
                     </p>
                     <button
                       onClick={() => setShowAutoChatComplete(false)}
@@ -2015,8 +2072,8 @@ Don't interrupt with story drama. Focus on the moment.`;
             {showHistory && (
             <div className="absolute inset-0 z-10 overflow-y-auto" style={{ background: 'var(--win95-light)' }}>
               <div
-                className="p-2 flex justify-between items-center sticky top-0"
-                style={{ background: 'var(--win95-mid)', borderBottom: '2px solid var(--win95-border-dark)' }}
+                className="p-2 flex justify-between items-center sticky top-0 z-10"
+                style={{ background: 'var(--win95-mid)', borderBottom: '2px solid var(--win95-border-dark)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
               >
                 <span className="win95-text" style={{ fontWeight: 'bold', fontSize: '14px' }}>Event Log</span>
                 <button onClick={() => setShowHistory(false)} className="win95-btn win95-btn-sm" style={{ fontSize: '11px', padding: '2px 8px' }}>
@@ -2731,7 +2788,23 @@ Don't interrupt with story drama. Focus on the moment.`;
                   const currentConv = allConversations.find(c => c.id === conversationId);
                   const conversationNpcIds = currentConv?.npcIds || identity.npcs.map(n => n.id);
                   return identity.npcs.filter(npc => conversationNpcIds.includes(npc.id));
-                })().map((npc) => (
+                })().map((npc) => {
+                  // Get relationship metrics for this NPC
+                  const relationship = identity.narrativeState?.relationships?.find(
+                    r => (r.fromId === npc.id && r.toId === 'player') ||
+                         (r.fromId === 'player' && r.toId === npc.id)
+                  );
+                  const metrics = relationship?.metrics;
+
+                  // Build tooltip with relationship info
+                  let tooltip = npc.isDead ? `${npc.name} is deceased` : `Ask ${npc.name} to respond`;
+                  if (metrics && !npc.isDead) {
+                    tooltip = `${npc.name} (${npc.role})\n` +
+                      `Trust: ${Math.round(metrics.trust)} | Affection: ${Math.round(metrics.affection)}\n` +
+                      `Fear: ${Math.round(metrics.fear)} | Respect: ${Math.round(metrics.respect)}`;
+                  }
+
+                  return (
                   <button
                     key={npc.id}
                     onClick={() => !npc.isDead && handleNpcRespond(npc)}
@@ -2749,7 +2822,7 @@ Don't interrupt with story drama. Focus on the moment.`;
                       cursor: npc.isDead ? 'not-allowed' : 'pointer',
                       minWidth: '36px',
                     }}
-                    title={npc.isDead ? `${npc.name} is deceased` : `Ask ${npc.name} to respond`}
+                    title={tooltip}
                   >
                     {/* Small NPC sprite head */}
                     <div
@@ -2785,7 +2858,8 @@ Don't interrupt with story drama. Focus on the moment.`;
                       {npc.name.split(' ')[0]}
                     </span>
                   </button>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -2874,6 +2948,12 @@ function PixelMeter({ label, value, iconClass }: { label: string; value: number;
 function fixTextSpacing(text: string): string {
   let fixed = text;
 
+  // Fix missing space BEFORE asterisk actions (e.g., "word.*action*" → "word. *action*")
+  fixed = fixed.replace(/([a-zA-Z.,!?])(\*[^*]+\*)/g, '$1 $2');
+
+  // Fix missing space AFTER asterisk actions (e.g., "*action*Word" → "*action* Word")
+  fixed = fixed.replace(/(\*[^*]+\*)([a-zA-Z])/g, '$1 $2');
+
   // Fix "word + number" patterns (e.g., "the500" → "the 500", "May12th" → "May 12th")
   // But preserve things like "web3", "24/7", contractions, etc.
   fixed = fixed.replace(/([a-zA-Z])(\d)/g, (match, letter, digit) => {
@@ -2906,27 +2986,13 @@ function formatMessageContent(content: string): React.ReactNode {
       // Extract action text WITHOUT asterisks, show as italic
       const actionText = part.slice(1, -1);
 
-      // Determine if this is a full action (sentence-like) or inline emphasis
-      // Full actions: contain spaces and describe actions (put on their own line)
-      // Inline emphasis: single words or short phrases mid-sentence (keep inline)
-      const wordCount = actionText.trim().split(/\s+/).length;
-      const isFullAction = wordCount >= 4 || actionText.includes(' and ') || actionText.includes(' then ');
-
-      if (isFullAction) {
-        // Full action description - display as block
-        return (
-          <span key={index} className="block my-0.5 italic" style={{ color: 'var(--win95-text-dim)', fontSize: '11px' }}>
-            {actionText}
-          </span>
-        );
-      } else {
-        // Inline emphasis - keep inline with surrounding text
-        return (
-          <span key={index} className="italic" style={{ color: 'var(--win95-text-dim)' }}>
-            {actionText}
-          </span>
-        );
-      }
+      // ALL actions are displayed as block-level (their own line)
+      // This ensures clear separation between actions and dialogue
+      return (
+        <span key={index} className="block my-0.5 italic" style={{ color: 'var(--win95-text-dim)', fontSize: '11px' }}>
+          {actionText}
+        </span>
+      );
     }
     // Trim whitespace and remove surrounding quotes from dialogue
     let trimmedPart = part.trim();
@@ -3007,6 +3073,26 @@ function checkResponseSimilarity(newResponse: string, recentMessages: GroupMessa
   return { isSimilar: false };
 }
 
+// Get this NPC's recent statements to prevent self-repetition
+function getOwnRecentStatements(recentMessages: GroupMessage[], npcId: string, npcName: string): string {
+  const ownMessages = recentMessages
+    .filter(m => m.role === 'assistant' && m.npcId === npcId)
+    .slice(-3); // Last 3 statements from this NPC
+
+  if (ownMessages.length === 0) return '';
+
+  const statements = ownMessages.map(m => {
+    // Truncate to first 80 chars for brevity
+    const short = m.content.length > 80 ? m.content.slice(0, 80) + '...' : m.content;
+    return `- "${short}"`;
+  });
+
+  return `
+🔄 YOUR RECENT STATEMENTS (DON'T REPEAT YOURSELF):
+${statements.join('\n')}
+Say something NEW. Don't echo your previous points.`;
+}
+
 // Get banned phrases from recent messages to inject into prompt
 function getBannedPhrases(recentMessages: GroupMessage[]): string {
   const phrases = new Set<string>();
@@ -3065,43 +3151,6 @@ function isRoleplayMode(recentMessages: GroupMessage[]): boolean {
   return false;
 }
 
-// Extract what one NPC might know about another NPC (from backstories, bullets, events)
-function extractNPCKnowledge(currentNpc: NPC, otherNpc: NPC, identity: Identity, simulationHistory: SimulationResult[]): string | null {
-  const knowledge: string[] = [];
-
-  // Check if other NPC's backstory/bullets mention current NPC's name
-  const currentNameLower = currentNpc.name.toLowerCase();
-  const otherBackstory = (otherNpc.backstory || '').toLowerCase();
-  const otherBullets = (otherNpc.bullets || []).join(' ').toLowerCase();
-
-  if (otherBackstory.includes(currentNameLower) || otherBullets.includes(currentNameLower)) {
-    // They're mentioned in the other's backstory - there's shared history
-    const bullet = otherNpc.bullets?.find(b => b.toLowerCase().includes(currentNameLower));
-    if (bullet) knowledge.push(`You know: ${bullet}`);
-  }
-
-  // Check if they were involved in the same simulation events
-  const sharedEvents = simulationHistory
-    .flatMap(sim => sim.events)
-    .filter(e => e.involvedNpcs.includes(currentNpc.id) && e.involvedNpcs.includes(otherNpc.id));
-
-  if (sharedEvents.length > 0) {
-    const event = sharedEvents[0];
-    knowledge.push(`You both were involved in: ${event.title}`);
-  }
-
-  // Check NPC changes that mention both
-  const relevantChanges = simulationHistory
-    .flatMap(sim => sim.npcChanges)
-    .filter(c => c.description.toLowerCase().includes(otherNpc.name.toLowerCase()));
-
-  if (relevantChanges.length > 0) {
-    knowledge.push(`Recent: ${relevantChanges[0].description}`);
-  }
-
-  return knowledge.length > 0 ? knowledge.join('. ') : null;
-}
-
 // Check if an NPC message directly addresses the player (for auto-chat pause)
 // IMPORTANT: In group chats, "you" can refer to other NPCs, not the player
 // So we ONLY pause when the player's actual NAME is mentioned
@@ -3154,45 +3203,6 @@ function isPlayerDirectlyAddressed(content: string, playerName: string): boolean
   }
 
   return false;
-}
-
-// Infer relationship between two NPCs based on their roles
-function inferNPCRelationship(npc1: NPC, npc2: NPC): string {
-  const roles = [npc1.role.toLowerCase(), npc2.role.toLowerCase()];
-
-  // Family relationships
-  if (roles.includes('spouse') || roles.includes('wife') || roles.includes('husband') || roles.includes('partner')) {
-    if (roles.includes('sibling') || roles.includes('brother') || roles.includes('sister')) {
-      return 'in-law relationship (your spouse\'s sibling)';
-    }
-    if (roles.includes('parent') || roles.includes('mother') || roles.includes('father')) {
-      return 'in-law relationship (your spouse\'s parent)';
-    }
-  }
-
-  if ((roles.includes('sibling') || roles.includes('brother') || roles.includes('sister')) &&
-      (roles.includes('sibling') || roles.includes('brother') || roles.includes('sister'))) {
-    return 'siblings who share family history';
-  }
-
-  // Work relationships
-  if ((roles.includes('boss') || roles.includes('manager') || roles.includes('supervisor')) &&
-      (roles.includes('coworker') || roles.includes('colleague') || roles.includes('employee'))) {
-    return 'workplace hierarchy - they have power over you or vice versa';
-  }
-
-  if ((roles.includes('coworker') || roles.includes('colleague')) &&
-      (roles.includes('coworker') || roles.includes('colleague'))) {
-    return 'coworkers who see each other daily';
-  }
-
-  // Friend relationships
-  if (roles.includes('friend') || roles.includes('best friend')) {
-    return 'friends who know each other through the player';
-  }
-
-  // Default - they know each other through the player
-  return 'acquaintances through ' + npc1.name;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -3673,7 +3683,6 @@ function buildGroupChatPrompt(
   npc: NPC,
   identity: Identity,
   recentMessages: GroupMessage[],
-  _simulationHistory: SimulationResult[],
   conversationNpcIds?: string[],
   options?: {
     isAutoChat?: boolean;
@@ -3699,6 +3708,9 @@ function buildGroupChatPrompt(
 
   // Build banned phrases for avoiding repetition
   const bannedPhrases = getBannedPhrases(recentMessages);
+
+  // Build self-repetition prevention for this specific NPC
+  const ownRecentStatements = getOwnRecentStatements(recentMessages, npc.id, npc.name);
 
   // ═══════════════════════════════════════════════════════════════════
   // SECTION 1: PERSONALITY FIRST - This defines HOW the NPC speaks
@@ -3738,6 +3750,195 @@ ${memories.map(m => `• ${m}`).join('\n')}
 
 Use these memories naturally - "Remember when you said..." or "Last time we talked..."
 Don't force them into every message.` : '';
+
+  // ═══════════════════════════════════════════════════════════════════
+  // SECTION 2.5: OFF-SCREEN MEMORIES - Things YOU said/did recently
+  // ═══════════════════════════════════════════════════════════════════
+  const offScreenSection = npc.offScreenMemories && npc.offScreenMemories.length > 0 ? `
+═══════════════════════════════════════════════════════════════════
+📜 THINGS YOU'VE SAID/DONE RECENTLY
+═══════════════════════════════════════════════════════════════════
+${npc.offScreenMemories.slice(-5).map(m => `• ${m}`).join('\n')}
+
+These are YOUR past statements and actions. You can reference them naturally:
+"Like I said before..." or "Remember when I mentioned..."
+DON'T repeat the exact same reference twice in a conversation.` : '';
+
+  // ═══════════════════════════════════════════════════════════════════
+  // SECTION 2.7: RELATIONSHIP METRICS - How you feel about the player
+  // ═══════════════════════════════════════════════════════════════════
+  const relationshipSection = (() => {
+    if (!identity.narrativeState?.relationships) return '';
+
+    const relationship = identity.narrativeState.relationships.find(
+      r => (r.fromId === npc.id && r.toId === 'player') ||
+           (r.fromId === 'player' && r.toId === npc.id)
+    );
+
+    if (!relationship) return '';
+
+    const m = relationship.metrics;
+
+    // Convert numeric metrics to behavioral guidance
+    const trustGuidance = m.trust < 30
+      ? "LOW TRUST - You're guarded and careful about what you share. You deflect personal questions and keep things surface-level."
+      : m.trust > 70
+      ? "HIGH TRUST - You feel comfortable being vulnerable and honest. You share your real thoughts and feelings."
+      : "MODERATE TRUST - Normal caution. You're open but not naive.";
+
+    const fearGuidance = m.fear > 50
+      ? "ELEVATED FEAR - You tread carefully around them. You're nervous, submissive, avoid confrontation."
+      : m.fear > 20
+      ? "SOME WARINESS - You're a bit on guard but not intimidated."
+      : "NO FEAR - You speak freely and aren't intimidated by them.";
+
+    const affectionGuidance = m.affection < 30
+      ? "LOW AFFECTION - Coolness in your tone. You're distant, maybe cold or dismissive."
+      : m.affection > 70
+      ? "HIGH AFFECTION - Warmth and care in how you speak. You're supportive, forgiving, genuinely care about them."
+      : "MODERATE AFFECTION - Friendly but not overly attached.";
+
+    return `
+═══════════════════════════════════════════════════════════════════
+💫 YOUR FEELINGS ABOUT ${identity.name.toUpperCase()}
+═══════════════════════════════════════════════════════════════════
+${trustGuidance}
+${fearGuidance}
+${affectionGuidance}
+
+Let these SUBTLY color your responses - don't state them directly.
+These are feelings, not scripts. React naturally based on how you feel.`;
+  })();
+
+  // ═══════════════════════════════════════════════════════════════════
+  // SECTION 2.8: GLOBAL TENSION - Overall drama level affecting everyone
+  // ═══════════════════════════════════════════════════════════════════
+  const tensionSection = (() => {
+    if (!identity.narrativeState?.globalTension) return '';
+
+    const tension = identity.narrativeState.globalTension;
+
+    if (tension >= 80) {
+      return `
+═══════════════════════════════════════════════════════════════════
+🔥 TENSION LEVEL: CRITICAL (${tension}/100)
+═══════════════════════════════════════════════════════════════════
+Everyone is ON EDGE. Small things trigger big reactions.
+- Emotions are raw and explosive
+- People are defensive, suspicious, ready to snap
+- Secrets are bubbling to the surface
+- Confrontations feel inevitable
+- Even neutral statements might be taken the wrong way`;
+    } else if (tension >= 60) {
+      return `
+═══════════════════════════════════════════════════════════════════
+⚡ TENSION LEVEL: HIGH (${tension}/100)
+═══════════════════════════════════════════════════════════════════
+Something is brewing. People feel it.
+- Undercurrents of conflict in the air
+- People are more reactive than usual
+- Trust is strained, patience is thin
+- Drama could erupt at any moment`;
+    } else if (tension >= 40) {
+      return `
+═══════════════════════════════════════════════════════════════════
+⚠️ TENSION LEVEL: MODERATE (${tension}/100)
+═══════════════════════════════════════════════════════════════════
+Some underlying tension, but manageable.
+- Be aware of sensitive topics
+- People have things on their mind
+- Normal conversation with occasional edge`;
+    } else {
+      // Low tension - don't add anything, let conversation flow naturally
+      return '';
+    }
+  })();
+
+  // ═══════════════════════════════════════════════════════════════════
+  // SECTION 2.9: STORY CONTEXT - Active arcs and what you know
+  // ═══════════════════════════════════════════════════════════════════
+  const storyContextSection = (() => {
+    if (!identity.narrativeState) return '';
+
+    // Get active story arc summary for this NPC
+    const arcSummary = getActiveStorySummary(identity.narrativeState, npc.id);
+
+    // Get facts this NPC knows from the knowledge graph
+    const npcFacts = getRelevantFactsForNPC(identity.narrativeState, npc.id);
+
+    if (!arcSummary && npcFacts.length === 0) return '';
+
+    let section = `
+═══════════════════════════════════════════════════════════════════
+📖 ONGOING STORY CONTEXT
+═══════════════════════════════════════════════════════════════════`;
+
+    if (arcSummary) {
+      section += `
+WHAT'S HAPPENING:
+${arcSummary}
+
+This shapes how you feel and what's on your mind. Let it color your mood
+and reactions, but don't dump exposition. Live in the moment.`;
+    }
+
+    if (npcFacts.length > 0) {
+      section += `
+
+THINGS YOU KNOW (from your perspective):
+${npcFacts.map(f => `• ${f}`).join('\n')}
+
+These are background knowledge. Use them IF relevant to the conversation,
+but don't force them in. You're having a conversation, not giving a briefing.`;
+    }
+
+    return section;
+  })();
+
+  // ═══════════════════════════════════════════════════════════════════
+  // SECTION 2.95: RECENT WORLD EVENTS - What happened in recent simulations
+  // ═══════════════════════════════════════════════════════════════════
+  const recentEventsSection = (() => {
+    if (!identity.simulationHistory || identity.simulationHistory.length === 0) return '';
+
+    // Get events from recent days (last 3 days)
+    const recentDays = identity.simulationHistory
+      .filter(e => e.day >= identity.currentDay - 3)
+      .slice(-5); // Last 5 events max
+
+    if (recentDays.length === 0) return '';
+
+    // Check if this NPC was involved in any events
+    const npcInvolvedEvents = recentDays.filter(e =>
+      e.involvedNpcs.some(name => name.toLowerCase().includes(npc.name.split(' ')[0].toLowerCase()))
+    );
+    const otherEvents = recentDays.filter(e =>
+      !e.involvedNpcs.some(name => name.toLowerCase().includes(npc.name.split(' ')[0].toLowerCase()))
+    );
+
+    let section = `
+═══════════════════════════════════════════════════════════════════
+📰 RECENT EVENTS (what happened lately)
+═══════════════════════════════════════════════════════════════════`;
+
+    if (npcInvolvedEvents.length > 0) {
+      section += `
+EVENTS YOU WERE INVOLVED IN:
+${npcInvolvedEvents.map(e => `• Day ${e.day}: ${e.title} - ${e.description.slice(0, 100)}...`).join('\n')}
+
+You REMEMBER these events. They affected you. Reference them naturally.`;
+    }
+
+    if (otherEvents.length > 0) {
+      section += `
+${npcInvolvedEvents.length > 0 ? '\n' : ''}THINGS YOU'VE HEARD ABOUT:
+${otherEvents.map(e => `• Day ${e.day}: ${e.title}`).join('\n')}
+
+You may have heard about these. React naturally if they come up.`;
+    }
+
+    return section;
+  })();
 
   // ═══════════════════════════════════════════════════════════════════
   // SECTION 3: PASSIVE KNOWLEDGE - Things you KNOW (not must reveal)
@@ -3863,6 +4064,7 @@ Example: "[IMG:selfie of ${npc.name} smirking in dim lighting]"`;
 • Sound like a REAL PERSON - contractions, slang, personality.
 • Match your character's speaking style consistently.
 ${bannedPhrases}
+${ownRecentStatements}
 
 🚫 DON'T:
 - Make up accusations/secrets you weren't told
@@ -3897,16 +4099,32 @@ After your response, ask them something - about their day, their situation, or j
   }
 
   // ═══════════════════════════════════════════════════════════════════
+  // SECTION 10: CONTENT GUIDELINES - What's allowed based on difficulty
+  // ═══════════════════════════════════════════════════════════════════
+  const contentSection = `
+═══════════════════════════════════════════════════════════════════
+⚠️ CONTENT BOUNDARIES
+═══════════════════════════════════════════════════════════════════
+${buildSafetyPreamble(identity.difficulty)}
+${getNPCBehaviorGuidelines(identity.difficulty)}`;
+
+  // ═══════════════════════════════════════════════════════════════════
   // BUILD THE FINAL PROMPT
   // ═══════════════════════════════════════════════════════════════════
   return `${personalitySection}
 ${speakingStyleSection}
 ${memorySection}
+${offScreenSection}
+${relationshipSection}
+${tensionSection}
+${storyContextSection}
+${recentEventsSection}
 ${knowledgeSection}
 ${participantSection}
 ${banterSection}
 ${responseRules}
 ${formatSection}
+${contentSection}
 ${lastMessageContext}
 ${specialDirective}
 

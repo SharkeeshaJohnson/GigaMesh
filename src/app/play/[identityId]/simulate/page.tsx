@@ -471,6 +471,58 @@ function SimulatePageContent() {
       }
     }
 
+    // ============================================
+    // CRITICAL: Store events in involved NPCs' memories
+    // This allows NPCs to reference past events in conversations
+    // ============================================
+    for (const event of result.events) {
+      // Create a memory string for this event
+      const eventMemory = `Day ${result.fromDay} EVENT: ${event.title} - ${event.description}`;
+
+      // Add to all involved NPCs' memories
+      for (const involvedName of (event.involvedNpcs || [])) {
+        // Find NPC by matching name (case-insensitive, partial match)
+        const npc = updated.npcs.find(n => {
+          const npcLower = n.name.toLowerCase();
+          const involvedLower = involvedName.toLowerCase();
+          return npcLower === involvedLower ||
+                 npcLower.includes(involvedLower) ||
+                 involvedLower.includes(npcLower.split(' ')[0]);
+        });
+
+        if (npc && !npc.isDead) {
+          // Avoid duplicate memories
+          if (!npc.offScreenMemories.some(m => m.includes(event.title))) {
+            npc.offScreenMemories.push(eventMemory);
+            console.log(`[Simulation] Added event memory to ${npc.name}: ${event.title}`);
+          }
+        }
+      }
+
+      // Also add to player character's identity (for player reference)
+      if (!updated.simulationHistory) {
+        updated.simulationHistory = [];
+      }
+      updated.simulationHistory.push({
+        day: result.fromDay,
+        title: event.title,
+        description: event.description,
+        involvedNpcs: event.involvedNpcs || [],
+      });
+    }
+
+    // Keep only last 20 simulation events in history
+    if (updated.simulationHistory && updated.simulationHistory.length > 20) {
+      updated.simulationHistory = updated.simulationHistory.slice(-20);
+    }
+
+    // Keep NPC offScreenMemories manageable (last 15)
+    for (const npc of updated.npcs) {
+      if (npc.offScreenMemories.length > 15) {
+        npc.offScreenMemories = npc.offScreenMemories.slice(-15);
+      }
+    }
+
     // Add new NPCs
     updated.npcs = [...updated.npcs, ...result.newNpcs];
 

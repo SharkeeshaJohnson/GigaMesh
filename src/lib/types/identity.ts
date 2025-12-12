@@ -111,10 +111,19 @@ export interface Identity {
   storySeeds?: StorySeed[]; // Legacy: simple story seeds (deprecated, use narrativeState)
   narrativeState?: NarrativeState; // Full narrative engine state
   playerActions?: PlayerAction[]; // NEW: Things player has said/done (butterfly effect)
+  simulationHistory?: SimulationHistoryEntry[]; // Recent simulation events for reference
   pixelArtUrl?: string; // Player character sprite URL
   spriteIndex?: number; // Index of selected sprite (visual only, not gameplay)
   createdAt: Date;
   lastPlayedAt: Date;
+}
+
+// Simulation history entry for tracking past events
+export interface SimulationHistoryEntry {
+  day: number;
+  title: string;
+  description: string;
+  involvedNpcs: string[];
 }
 
 // Constants

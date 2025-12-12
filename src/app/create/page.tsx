@@ -41,7 +41,7 @@ type CreationStep = 'difficulty' | 'character' | 'loading' | 'complete';
 function cleanupAIText(text: string): string {
   if (!text) return text;
 
-  return text
+  let cleaned = text
     // Fix missing space between word and number (e.g., "until18" -> "until 18")
     .replace(/([a-zA-Z])(\d)/g, '$1 $2')
     // Fix missing space between number and word (e.g., "18years" -> "18 years")
@@ -52,6 +52,13 @@ function cleanupAIText(text: string): string {
     .replace(/\s{2,}/g, ' ')
     // Trim whitespace
     .trim();
+
+  // Ensure sentence ends with period (if it doesn't end with punctuation)
+  if (cleaned && !/[.!?]$/.test(cleaned)) {
+    cleaned += '.';
+  }
+
+  return cleaned;
 }
 
 // Character sprite data
@@ -867,24 +874,24 @@ function CreatePageContent() {
 
                   <div style={{ marginBottom: '8px' }}>
                     <p className="win95-text" style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '4px' }}>Background:</p>
-                    <ul style={{ margin: 0, paddingLeft: '16px' }}>
+                    <div style={{ paddingLeft: '8px' }}>
                       {identity.scenario.briefBackground?.map((bullet, idx) => (
-                        <li key={idx} className="win95-text" style={{ fontSize: '13px' }}>
-                          {cleanupAIText(bullet)}
-                        </li>
+                        <p key={idx} className="win95-text" style={{ fontSize: '13px', marginBottom: '4px' }}>
+                          - {cleanupAIText(bullet)}
+                        </p>
                       ))}
-                    </ul>
+                    </div>
                   </div>
 
                   <div>
                     <p className="win95-text" style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '4px' }}>Current Situation:</p>
-                    <ul style={{ margin: 0, paddingLeft: '16px' }}>
+                    <div style={{ paddingLeft: '8px' }}>
                       {identity.scenario.currentStory?.map((bullet, idx) => (
-                        <li key={idx} className="win95-text" style={{ fontSize: '13px' }}>
-                          {cleanupAIText(bullet)}
-                        </li>
+                        <p key={idx} className="win95-text" style={{ fontSize: '13px', marginBottom: '4px' }}>
+                          - {cleanupAIText(bullet)}
+                        </p>
                       ))}
-                    </ul>
+                    </div>
                   </div>
                 </div>
               )}
@@ -916,13 +923,13 @@ function CreatePageContent() {
 
                     <div style={{ marginBottom: '8px' }}>
                       <p className="win95-text" style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '4px' }}>About {npc.name}:</p>
-                      <ul style={{ margin: 0, paddingLeft: '16px' }}>
+                      <div style={{ paddingLeft: '8px' }}>
                         {npc.bullets?.map((bullet, idx) => (
-                          <li key={idx} className="win95-text" style={{ fontSize: '13px' }}>
-                            {cleanupAIText(bullet)}
-                          </li>
+                          <p key={idx} className="win95-text" style={{ fontSize: '13px', marginBottom: '4px' }}>
+                            - {cleanupAIText(bullet)}
+                          </p>
                         ))}
-                      </ul>
+                      </div>
                     </div>
 
                     <div style={{ display: 'flex', gap: '16px' }}>
