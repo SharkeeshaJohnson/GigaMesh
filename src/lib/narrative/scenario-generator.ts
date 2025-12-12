@@ -1,33 +1,152 @@
 /**
  * Scenario Generator
  *
- * Generates opening scenarios for individual NPCs.
- * Simplified approach - scenarios are based on NPC's actual backstory and personality.
+ * Generates opening scenarios for individual NPCs using LLM calls.
+ * Each scenario is dynamically generated based on:
+ * - NPC's personality
+ * - NPC's bullet points (background info)
+ * - NPC's offScreenMemories (simulation events)
+ * - Current emotional state
+ * - Player's name and difficulty mode
  */
 
 import { NPC, Identity, SimulationEvent } from '../types';
+import { MODEL_CONFIG } from '../models';
+import { stripModelArtifacts, extractTextContent } from '../llm-utils';
 
 /**
- * Generate an opening scenario for an NPC on Day 1
- * Uses the NPC's actual backstory to create a personalized opening
+ * Message type for LLM calls
  */
-export function generateDay1Scenario(
+interface ChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+/**
+ * SendMessage function type (passed from component with useChat hook)
+ */
+type SendMessageFn = (params: {
+  messages: ChatMessage[];
+  model: string;
+}) => Promise<unknown>;
+
+/**
+ * Build the prompt for generating an opening scenario
+ */
+function buildScenarioPrompt(
   npc: NPC,
-  identity: Identity
+  identity: Identity,
+  context?: string
 ): string {
   const bullets = npc.bullets || [];
-  const personality = npc.personality || '';
-  const role = npc.role || '';
+  const personality = npc.personality || 'mysterious';
   const emotionalStates = npc.currentEmotionalState || ['neutral'];
+  const offScreenMemories = npc.offScreenMemories || [];
 
-  // Get the NPC's hidden secret/motivation from bullet 2
-  const publicInfo = bullets[0] || '';
-  const hiddenInfo = bullets[1] || '';
+  // Get emotional state as string
+  const emotionalState = Array.isArray(emotionalStates)
+    ? emotionalStates.join(', ')
+    : emotionalStates;
 
-  // Determine emotional undertone from current state
-  const primaryEmotion = emotionalStates[0] || 'neutral';
+  // Build bullet points section
+  const bulletSection = bullets.length > 0
+    ? bullets.map((b, i) => `  ${i + 1}. ${b}`).join('\n')
+    : '  (No specific background provided)';
 
-  // Build a scenario that hints at their personality/situation without being generic
+  // Build memories section
+  const memoriesSection = offScreenMemories.length > 0
+    ? offScreenMemories.map(m => `  - ${m}`).join('\n')
+    : '  (No recent memories)';
+
+  // Additional context (e.g., recent simulation event)
+  const contextSection = context
+    ? `\n=== RECENT EVENT ===\n${context}\n`
+    : '';
+
+  return `Generate a short opening scenario for an NPC greeting the player in a life simulation game.
+
+=== NPC DETAILS ===
+NAME: ${npc.name}
+PERSONALITY: ${personality}
+CURRENT EMOTIONAL STATE: ${emotionalState}
+
+BACKGROUND (what you know about them):
+${bulletSection}
+
+RECENT MEMORIES/EVENTS:
+${memoriesSection}
+${contextSection}
+=== PLAYER ===
+NAME: ${identity.name}
+DIFFICULTY: ${identity.difficulty} (${identity.difficulty === 'crazy' ? 'anything goes, dark/explicit content allowed' : identity.difficulty === 'dramatic' ? 'dramatic and intense' : 'realistic and grounded'})
+
+=== INSTRUCTIONS ===
+Write a brief opening scenario (2-3 sentences) that:
+1. Shows the NPC approaching or encountering the player
+2. Reflects their personality and current emotional state
+3. Hints at something from their background or recent memories WITHOUT being obvious
+4. Uses italics for actions (*action*) and quotes for dialogue ("dialogue")
+5. Creates intrigue and makes the player want to engage
+6. Fits the difficulty tone (${identity.difficulty})
+
+DO NOT:
+- Be generic (avoid "Hey there" or "How are you?")
+- Mention their background facts directly
+- Use the same patterns repeatedly
+- Make it too long (keep it punchy)
+
+Return ONLY the scenario text, nothing else. No explanation, no prefix.`;
+}
+
+/**
+ * Extract scenario from LLM response
+ */
+function extractScenarioFromResponse(response: unknown): string | null {
+  try {
+    // Handle various response structures
+    const r = response as Record<string, unknown>;
+    const paths = [
+      (r?.data as Record<string, unknown>)?.data,
+      r?.data,
+      r,
+    ];
+
+    for (const base of paths) {
+      if (!base) continue;
+      const b = base as Record<string, unknown>;
+      const choices = b?.choices as Array<{ message?: { content?: unknown } }>;
+      if (choices?.[0]?.message?.content) {
+        const extracted = extractTextContent(choices[0].message.content);
+        if (extracted) {
+          return stripModelArtifacts(extracted).trim();
+        }
+      }
+      // Try direct content paths
+      const directContent =
+        (b as { message?: { content?: unknown } })?.message?.content ||
+        (b as { content?: unknown })?.content ||
+        (b as { text?: unknown })?.text;
+      if (directContent) {
+        const extracted = extractTextContent(directContent);
+        if (extracted) {
+          return stripModelArtifacts(extracted).trim();
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[ScenarioGen] Failed to extract scenario from response:', e);
+  }
+  return null;
+}
+
+/**
+ * Fallback scenarios when LLM call fails
+ * These are still personalized using NPC name and emotional state
+ */
+function getFallbackScenario(npc: NPC): string {
+  const emotionalStates = npc.currentEmotionalState || ['neutral'];
+  const primaryEmotion = Array.isArray(emotionalStates) ? emotionalStates[0] : emotionalStates;
+
   const emotionDescriptors: Record<string, string> = {
     neutral: 'with a measured expression',
     happy: 'with a warm smile',
@@ -53,104 +172,138 @@ export function generateDay1Scenario(
 
   const emotionDesc = emotionDescriptors[primaryEmotion] || 'with an unreadable expression';
 
-  // Create scenario based on their role/relationship type
-  const roleLower = role.toLowerCase();
+  const fallbacks = [
+    `*${npc.name} approaches you ${emotionDesc}.* "We need to talk. Alone."`,
+    `*${npc.name} catches your attention ${emotionDesc}.* "I've been meaning to find you."`,
+    `*You notice ${npc.name} watching you. They approach ${emotionDesc}.* "Do you have a moment?"`,
+    `*${npc.name} appears ${emotionDesc}.* "I need to tell you something."`,
+    `*${npc.name} corners you ${emotionDesc}.* "Before you say anything, just listen."`,
+  ];
 
-  // Detect relationship category
-  let relationshipType = 'acquaintance';
-  if (roleLower.includes('wife') || roleLower.includes('husband') || roleLower.includes('spouse') || roleLower.includes('partner')) {
-    relationshipType = 'romantic';
-  } else if (roleLower.includes('boss') || roleLower.includes('manager') || roleLower.includes('supervisor')) {
-    relationshipType = 'superior';
-  } else if (roleLower.includes('coworker') || roleLower.includes('colleague')) {
-    relationshipType = 'colleague';
-  } else if (roleLower.includes('friend') || roleLower.includes('bestie') || roleLower.includes('buddy')) {
-    relationshipType = 'friend';
-  } else if (roleLower.includes('mother') || roleLower.includes('father') || roleLower.includes('parent') || roleLower.includes('mom') || roleLower.includes('dad')) {
-    relationshipType = 'parent';
-  } else if (roleLower.includes('sibling') || roleLower.includes('sister') || roleLower.includes('brother')) {
-    relationshipType = 'sibling';
-  } else if (roleLower.includes('neighbor')) {
-    relationshipType = 'neighbor';
-  } else if (roleLower.includes('rival') || roleLower.includes('enemy') || roleLower.includes('predator')) {
-    relationshipType = 'rival';
-  } else if (roleLower.includes('seducer') || roleLower.includes('seductress') || roleLower.includes('lover') || roleLower.includes('affair') || roleLower.includes('mistress')) {
-    relationshipType = 'romantic_tension';
+  return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+}
+
+/**
+ * Generate an opening scenario for an NPC on Day 1
+ * Uses LLM to create a personalized opening based on NPC's full context
+ */
+export async function generateDay1Scenario(
+  npc: NPC,
+  identity: Identity,
+  sendMessage?: SendMessageFn
+): Promise<string> {
+  // If no sendMessage provided, return fallback
+  if (!sendMessage) {
+    console.log(`[ScenarioGen] No sendMessage for ${npc.name}, using fallback`);
+    return getFallbackScenario(npc);
   }
 
-  // Opening scenarios by relationship type with more variety
-  const openings: Record<string, string[]> = {
-    romantic: [
-      `*${npc.name} is waiting for you ${emotionDesc}.* "There you are. We need to talk."`,
-      `*You find ${npc.name} in the bedroom, ${emotionDesc}.* "Sit down. I've been thinking about us."`,
-      `*${npc.name} looks up as you enter, ${emotionDesc}.* "I wasn't sure you'd come home tonight."`,
-    ],
-    romantic_tension: [
-      `*${npc.name} corners you somewhere private, ${emotionDesc}.* "Finally, I have you alone."`,
-      `*${npc.name} appears beside you, ${emotionDesc}.* "I've been watching you. Waiting for the right moment."`,
-      `*${npc.name} blocks your path, ${emotionDesc}.* "Don't pretend you haven't noticed me looking at you."`,
-    ],
-    superior: [
-      `*${npc.name} calls you into their office, ${emotionDesc}.* "Close the door. This is between us."`,
-      `*${npc.name} intercepts you in the hallway, ${emotionDesc}.* "My office. Now. We need to discuss something."`,
-      `*${npc.name} is waiting at your desk when you arrive, ${emotionDesc}.* "We need to have a conversation."`,
-    ],
-    colleague: [
-      `*${npc.name} pulls you aside near the break room, ${emotionDesc}.* "Hey, can we talk? Not here though."`,
-      `*${npc.name} catches you in the elevator, ${emotionDesc}.* "Perfect timing. I need to tell you something."`,
-      `*${npc.name} slides into the seat next to you, ${emotionDesc}.* "You're not going to believe what I found out."`,
-    ],
-    friend: [
-      `*${npc.name} shows up unannounced, ${emotionDesc}.* "Sorry for just showing up. I needed to see you."`,
-      `*You meet ${npc.name} at your usual spot. They look at you ${emotionDesc}.* "Thanks for coming. I didn't know who else to call."`,
-      `*${npc.name} grabs your arm, ${emotionDesc}.* "I need to tell you something. Promise you won't freak out."`,
-    ],
-    parent: [
-      `*${npc.name} is waiting in the kitchen, ${emotionDesc}.* "Sit down. We're going to have a real conversation."`,
-      `*${npc.name} catches you at the door, ${emotionDesc}.* "Not so fast. We need to talk about something."`,
-      `*${npc.name} looks at you ${emotionDesc}.* "I've been waiting to have this conversation with you."`,
-    ],
-    sibling: [
-      `*${npc.name} barges in without knocking, ${emotionDesc}.* "We need to talk. Now."`,
-      `*${npc.name} pulls you into an empty room, ${emotionDesc}.* "I found something out. About the family."`,
-      `*${npc.name} texts you to meet somewhere private. When you arrive, they look at you ${emotionDesc}.* "Thanks for coming."`,
-    ],
-    neighbor: [
-      `*${npc.name} flags you down outside, ${emotionDesc}.* "Hey, got a second? Something happened."`,
-      `*There's a knock at your door. It's ${npc.name}, ${emotionDesc}.* "Sorry to bother you, but I thought you should know..."`,
-      `*${npc.name} catches you in the hallway, ${emotionDesc}.* "Can we talk? Privately?"`,
-    ],
-    rival: [
-      `*${npc.name} approaches you, ${emotionDesc}.* "Well, well. Didn't expect to see you here."`,
-      `*${npc.name} blocks your path, ${emotionDesc}.* "We have unfinished business, you and I."`,
-      `*${npc.name} finds you alone, ${emotionDesc}.* "I think it's time we had a little chat."`,
-    ],
-    acquaintance: [
-      `*${npc.name} approaches you, ${emotionDesc}.* "I've been meaning to talk to you about something."`,
-      `*${npc.name} catches your attention, ${emotionDesc}.* "Do you have a moment? It's important."`,
-      `*You notice ${npc.name} watching you. They approach ${emotionDesc}.* "Can we talk somewhere private?"`,
-    ],
-  };
+  try {
+    const prompt = buildScenarioPrompt(npc, identity);
 
-  const scenarios = openings[relationshipType] || openings.acquaintance;
-  return scenarios[Math.floor(Math.random() * scenarios.length)];
+    console.log(`[ScenarioGen] Generating Day 1 scenario for ${npc.name}...`);
+
+    const response = await sendMessage({
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a creative writer for a life simulation game. Write immersive, character-driven opening scenarios. Keep them short and intriguing.',
+        },
+        { role: 'user', content: prompt },
+      ],
+      model: MODEL_CONFIG.scenarioGeneration,
+    });
+
+    const scenario = extractScenarioFromResponse(response);
+
+    if (scenario && scenario.length > 10) {
+      console.log(`[ScenarioGen] Generated scenario for ${npc.name}: ${scenario.substring(0, 50)}...`);
+      return scenario;
+    }
+
+    console.log(`[ScenarioGen] Empty/short response for ${npc.name}, using fallback`);
+    return getFallbackScenario(npc);
+  } catch (error) {
+    console.error(`[ScenarioGen] LLM error for ${npc.name}:`, error);
+    return getFallbackScenario(npc);
+  }
 }
 
 /**
  * Generate a scenario based on a simulation event
  * Used when simulation completes to update NPC opening scenarios
  */
-export function generateEventBasedScenario(
+export async function generateEventBasedScenario(
   npc: NPC,
   event: SimulationEvent,
-  identity: Identity
-): string {
+  identity: Identity,
+  sendMessage?: SendMessageFn
+): Promise<string> {
+  // Build event context
+  const eventContext = `
+EVENT TITLE: ${event.title}
+EVENT DESCRIPTION: ${event.description}
+SEVERITY: ${event.severity}
+INVOLVED: ${event.involvedNpcs?.join(', ') || 'Unknown'}
+
+This NPC ${event.involvedNpcs?.some(n =>
+  n.toLowerCase().includes(npc.name.split(' ')[0].toLowerCase())
+) ? 'was directly involved in' : 'knows about'} this event.`;
+
+  // If no sendMessage provided, use simple fallback
+  if (!sendMessage) {
+    console.log(`[ScenarioGen] No sendMessage for event scenario ${npc.name}, using fallback`);
+    return getEventFallbackScenario(npc, event);
+  }
+
+  try {
+    const prompt = buildScenarioPrompt(npc, identity, eventContext);
+
+    console.log(`[ScenarioGen] Generating event-based scenario for ${npc.name}...`);
+
+    const response = await sendMessage({
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a creative writer for a life simulation game. Write immersive opening scenarios that reflect recent dramatic events. The NPC should be affected by what happened.',
+        },
+        { role: 'user', content: prompt },
+      ],
+      model: MODEL_CONFIG.scenarioGeneration,
+    });
+
+    const scenario = extractScenarioFromResponse(response);
+
+    if (scenario && scenario.length > 10) {
+      console.log(`[ScenarioGen] Generated event scenario for ${npc.name}: ${scenario.substring(0, 50)}...`);
+      return scenario;
+    }
+
+    return getEventFallbackScenario(npc, event);
+  } catch (error) {
+    console.error(`[ScenarioGen] LLM error for event scenario ${npc.name}:`, error);
+    return getEventFallbackScenario(npc, event);
+  }
+}
+
+/**
+ * Fallback for event-based scenarios
+ */
+function getEventFallbackScenario(npc: NPC, event: SimulationEvent): string {
   const npcFirstName = npc.name.split(' ')[0];
   const eventLower = event.description.toLowerCase();
   const wasDirectlyInvolved = eventLower.includes(npc.name.toLowerCase()) ||
                                eventLower.includes(npcFirstName.toLowerCase());
 
-  // Emotional reactions based on severity
+  if (wasDirectlyInvolved) {
+    const personalReactions = [
+      `*${npc.name} avoids your eyes.* "You probably heard what happened with me..."`,
+      `*${npc.name} takes a deep breath.* "Before you say anything, let me explain."`,
+      `*${npc.name} looks exhausted.* "I know you must have questions."`,
+    ];
+    return personalReactions[Math.floor(Math.random() * personalReactions.length)];
+  }
+
   const reactions: Record<string, string[]> = {
     minor: [
       `*${npc.name} seems distracted.* "Hey. Did you hear about what happened?"`,
@@ -170,30 +323,64 @@ export function generateEventBasedScenario(
     ],
   };
 
-  let scenario: string;
-
-  if (wasDirectlyInvolved) {
-    const personalReactions = [
-      `*${npc.name} avoids your eyes.* "You probably heard what happened with me..."`,
-      `*${npc.name} takes a deep breath.* "Before you say anything, let me explain."`,
-      `*${npc.name} looks exhausted.* "I know you must have questions."`,
-    ];
-    scenario = personalReactions[Math.floor(Math.random() * personalReactions.length)];
-  } else {
-    const severityReactions = reactions[event.severity] || reactions.moderate;
-    scenario = severityReactions[Math.floor(Math.random() * severityReactions.length)];
-  }
-
-  return scenario;
+  const severityReactions = reactions[event.severity] || reactions.moderate;
+  return severityReactions[Math.floor(Math.random() * severityReactions.length)];
 }
 
 /**
  * Generate a random new scenario for an NPC (when no simulation event involves them)
  */
-export function generateRandomScenario(
+export async function generateRandomScenario(
   npc: NPC,
-  identity: Identity
-): string {
+  identity: Identity,
+  sendMessage?: SendMessageFn
+): Promise<string> {
+  // If no sendMessage, use simple fallback
+  if (!sendMessage) {
+    console.log(`[ScenarioGen] No sendMessage for random scenario ${npc.name}, using fallback`);
+    return getRandomFallbackScenario(npc);
+  }
+
+  try {
+    // Add context about it being a "new day" scenario
+    const dayContext = `
+This is a new day. The NPC has had time to think and may have new concerns,
+observations, or things they want to discuss. Generate something that feels
+like a natural continuation of their life, not necessarily related to any specific event.`;
+
+    const prompt = buildScenarioPrompt(npc, identity, dayContext);
+
+    console.log(`[ScenarioGen] Generating random scenario for ${npc.name}...`);
+
+    const response = await sendMessage({
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a creative writer for a life simulation game. Write varied, interesting opening scenarios for a new day. Make each one feel fresh and unique to the character.',
+        },
+        { role: 'user', content: prompt },
+      ],
+      model: MODEL_CONFIG.scenarioGeneration,
+    });
+
+    const scenario = extractScenarioFromResponse(response);
+
+    if (scenario && scenario.length > 10) {
+      console.log(`[ScenarioGen] Generated random scenario for ${npc.name}: ${scenario.substring(0, 50)}...`);
+      return scenario;
+    }
+
+    return getRandomFallbackScenario(npc);
+  } catch (error) {
+    console.error(`[ScenarioGen] LLM error for random scenario ${npc.name}:`, error);
+    return getRandomFallbackScenario(npc);
+  }
+}
+
+/**
+ * Fallback for random scenarios
+ */
+function getRandomFallbackScenario(npc: NPC): string {
   const scenarios = [
     `*${npc.name} catches your attention.* "Perfect timing. I was thinking about you."`,
     `*You run into ${npc.name}.* "Oh! I've been meaning to talk to you."`,
@@ -217,4 +404,32 @@ export function severityScore(severity: string): number {
     'explosive': 4,
   };
   return scores[severity] || 2;
+}
+
+/**
+ * Batch generate scenarios for multiple NPCs (more efficient)
+ * Used during identity creation
+ */
+export async function generateScenariosForNPCs(
+  npcs: NPC[],
+  identity: Identity,
+  sendMessage?: SendMessageFn
+): Promise<Map<string, string>> {
+  const scenarios = new Map<string, string>();
+
+  // Generate scenarios sequentially to avoid rate limiting
+  for (const npc of npcs) {
+    if (npc.isDead) {
+      scenarios.set(npc.id, '');
+      continue;
+    }
+
+    const scenario = await generateDay1Scenario(npc, identity, sendMessage);
+    scenarios.set(npc.id, scenario);
+
+    // Small delay between requests to avoid rate limiting
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+
+  return scenarios;
 }

@@ -31,7 +31,7 @@ import {
   parseJSONSafely,
   parseJSONArraySafely,
 } from '@/lib/llm-utils';
-import { initializeNarrativeForNewGame, generateDay1Scenario } from '@/lib/narrative';
+import { initializeNarrativeForNewGame, generateScenariosForNPCs } from '@/lib/narrative';
 import { getNPCNameSuggestions, getPlayerNameSuggestions } from '@/lib/name-pools';
 import { getEmotionalStatesForRating, getRandomEmotionalStates, getEmotionCountForRating } from '@/lib/emotional-states';
 
@@ -362,10 +362,14 @@ function CreatePageContent() {
       const narrativeState = initializeNarrativeForNewGame(newIdentity);
       newIdentity.narrativeState = narrativeState;
 
-      // Generate per-NPC opening scenarios
+      // Generate per-NPC opening scenarios using LLM
       // Each NPC gets their own tailored scenario for 1:1 chats
+      // based on personality, bullets, and emotional state
+      setLoadingMessage('Generating NPC scenarios...');
+      const scenariosMap = await generateScenariosForNPCs(newIdentity.npcs, newIdentity, sendMessage);
+
       newIdentity.npcs = newIdentity.npcs.map(npc => {
-        const openingScenario = generateDay1Scenario(npc, newIdentity);
+        const openingScenario = scenariosMap.get(npc.id) || '';
         return {
           ...npc,
           openingScenario,

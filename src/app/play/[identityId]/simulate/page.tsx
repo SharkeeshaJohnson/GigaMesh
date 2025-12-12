@@ -113,12 +113,20 @@ function SimulatePageContent() {
   // Update NPC opening scenarios based on simulation events
   // NPCs involved in events get scenarios referencing those events
   // NPCs not involved get random new scenarios
-  const updateNPCOpeningScenarios = (
+  // Now uses LLM to generate unique, personalized scenarios
+  const updateNPCOpeningScenarios = async (
     currentIdentity: Identity,
     simulationResult: SimulationResult
-  ): Identity => {
-    const updatedNpcs = currentIdentity.npcs.map((npc) => {
-      if (npc.isDead) return npc; // Skip dead NPCs
+  ): Promise<Identity> => {
+    setLoadingMessage('Generating NPC scenarios...');
+
+    const updatedNpcs: typeof currentIdentity.npcs = [];
+
+    for (const npc of currentIdentity.npcs) {
+      if (npc.isDead) {
+        updatedNpcs.push(npc); // Skip dead NPCs
+        continue;
+      }
 
       // Find events involving this NPC by checking if their name appears
       const npcFirstName = npc.name.split(' ')[0].toLowerCase();
@@ -135,20 +143,21 @@ function SimulatePageContent() {
         const primaryEvent = relevantEvents.sort(
           (a, b) => severityScore(b.severity) - severityScore(a.severity)
         )[0];
-        newScenario = generateEventBasedScenario(npc, primaryEvent, currentIdentity);
+        // Use LLM to generate personalized scenario
+        newScenario = await generateEventBasedScenario(npc, primaryEvent, currentIdentity, sendMessage);
         console.log(`[Simulation] ${npc.name} gets event-based scenario from: ${primaryEvent.title}`);
       } else {
-        // Generate random new scenario
-        newScenario = generateRandomScenario(npc, currentIdentity);
+        // Generate random new scenario using LLM
+        newScenario = await generateRandomScenario(npc, currentIdentity, sendMessage);
         console.log(`[Simulation] ${npc.name} gets random scenario (no events involved them)`);
       }
 
-      return {
+      updatedNpcs.push({
         ...npc,
         openingScenario: newScenario,
         scenarioUsed: false, // Mark as new, ready to display in 1:1 chat
-      };
-    });
+      });
+    }
 
     return { ...currentIdentity, npcs: updatedNpcs };
   };
@@ -185,7 +194,8 @@ function SimulatePageContent() {
 
         // Update NPC opening scenarios based on simulation events
         // This gives each NPC a fresh scenario for their 1:1 chat referencing what happened
-        updatedIdentity = updateNPCOpeningScenarios(updatedIdentity, simulationResult);
+        // Now uses LLM for personalized scenarios based on NPC personality/memories
+        updatedIdentity = await updateNPCOpeningScenarios(updatedIdentity, simulationResult);
         console.log('[Simulation] Updated NPC opening scenarios for all NPCs');
 
         await saveToIndexedDB('identities', updatedIdentity);

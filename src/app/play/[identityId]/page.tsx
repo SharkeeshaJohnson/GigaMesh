@@ -442,19 +442,25 @@ export default function GamePage() {
           });
 
           // Migration: Generate opening scenarios for existing saves
+          // Uses fallback scenarios (no LLM) for quick migration
           const { generateDay1Scenario } = await import('@/lib/narrative');
           let scenarioMigrationCount = 0;
-          loadedIdentity.npcs = loadedIdentity.npcs.map((npc: NPC) => {
+          const updatedNpcs: NPC[] = [];
+          for (const npc of loadedIdentity.npcs) {
             if (!npc.openingScenario) {
               scenarioMigrationCount++;
-              return {
+              // Pass undefined for sendMessage to use fast fallback scenarios
+              const openingScenario = await generateDay1Scenario(npc, loadedIdentity, undefined);
+              updatedNpcs.push({
                 ...npc,
-                openingScenario: generateDay1Scenario(npc, loadedIdentity),
+                openingScenario,
                 scenarioUsed: false,
-              };
+              });
+            } else {
+              updatedNpcs.push(npc);
             }
-            return npc;
-          });
+          }
+          loadedIdentity.npcs = updatedNpcs;
           if (scenarioMigrationCount > 0) {
             needsSave = true;
             console.log(`[Migration] Generated opening scenarios for ${scenarioMigrationCount} NPCs`);

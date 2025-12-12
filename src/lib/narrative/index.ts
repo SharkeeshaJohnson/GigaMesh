@@ -70,6 +70,7 @@ export {
   generateDay1Scenario,
   generateEventBasedScenario,
   generateRandomScenario,
+  generateScenariosForNPCs,
   severityScore,
 } from './scenario-generator';
 
