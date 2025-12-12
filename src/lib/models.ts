@@ -45,7 +45,7 @@ export const NPC_MODEL_POOL = [
   // Each NPC gets a different model for unique "voice" in scenarios
   'grok/grok-2-1212',                           // NPC 0: Grok 2 - edgy, unfiltered
   'deepseek/deepseek-chat',                     // NPC 1: DeepSeek - reasoning focused
-  'fireworks/qwen2p5-72b-instruct',             // NPC 2: Qwen 72B - creative, expressive
+  'qwen3-30b-a3b',                              // NPC 2: Qwen 30B - creative, expressive
   // Note: Only 3 NPCs now, so we only need 3 diverse models
 ];
 
