@@ -3818,38 +3818,27 @@ These are feelings, not scripts. React naturally based on how you feel.`;
 
     const tension = identity.narrativeState.globalTension;
 
+    // Only show tension guidance for HIGH tension (60+)
+    // Below that, let conversations be NORMAL
     if (tension >= 80) {
       return `
 ═══════════════════════════════════════════════════════════════════
 🔥 TENSION LEVEL: CRITICAL (${tension}/100)
 ═══════════════════════════════════════════════════════════════════
-Everyone is ON EDGE. Small things trigger big reactions.
-- Emotions are raw and explosive
-- People are defensive, suspicious, ready to snap
-- Secrets are bubbling to the surface
-- Confrontations feel inevitable
-- Even neutral statements might be taken the wrong way`;
+Things are tense right now. React accordingly.
+- People are on edge and defensive
+- Conflicts may surface more easily`;
     } else if (tension >= 60) {
       return `
 ═══════════════════════════════════════════════════════════════════
 ⚡ TENSION LEVEL: HIGH (${tension}/100)
 ═══════════════════════════════════════════════════════════════════
-Something is brewing. People feel it.
-- Undercurrents of conflict in the air
-- People are more reactive than usual
-- Trust is strained, patience is thin
-- Drama could erupt at any moment`;
-    } else if (tension >= 40) {
-      return `
-═══════════════════════════════════════════════════════════════════
-⚠️ TENSION LEVEL: MODERATE (${tension}/100)
-═══════════════════════════════════════════════════════════════════
-Some underlying tension, but manageable.
-- Be aware of sensitive topics
-- People have things on their mind
-- Normal conversation with occasional edge`;
+There's some tension in the air.
+- People are a bit more reactive than usual
+- Be aware of sensitive topics`;
     } else {
-      // Low tension - don't add anything, let conversation flow naturally
+      // Low/moderate tension - don't add ANY tension guidance
+      // Let conversations be completely normal
       return '';
     }
   })();
@@ -4056,6 +4045,22 @@ Example: "[IMG:selfie of ${npc.name} smirking in dim lighting]"`;
   // ═══════════════════════════════════════════════════════════════════
   // SECTION 7: FORMAT & FORBIDDEN STUFF
   // ═══════════════════════════════════════════════════════════════════
+
+  // Add normalcy directive for early days / low tension
+  const isEarlyGame = identity.currentDay <= 3;
+  const isLowTension = !identity.narrativeState?.globalTension || identity.narrativeState.globalTension < 40;
+
+  const normalcyDirective = (isEarlyGame || isLowTension) ? `
+🎯 BE NORMAL - This is ${isEarlyGame ? 'early in the story' : 'a calm period'}
+- Have a NORMAL conversation like regular people do
+- Talk about mundane stuff: work, weather, gossip, food, plans
+- Don't act suspicious, threatening, or mysteriously ominous
+- Don't hint at dark secrets unless directly relevant
+- React NORMALLY to what people say (agree, disagree, laugh, eye-roll)
+- If they say "nothing really" - ACCEPT IT and move on to something else
+- You are NOT in a thriller movie right now
+` : '';
+
   const formatSection = `
 ═══════════════════════════════════════════════════════════════════
 ✍️ RESPONSE FORMAT
@@ -4065,12 +4070,14 @@ Example: "[IMG:selfie of ${npc.name} smirking in dim lighting]"`;
 • Match your character's speaking style consistently.
 ${bannedPhrases}
 ${ownRecentStatements}
-
+${normalcyDirective}
 🚫 DON'T:
 - Make up accusations/secrets you weren't told
 - Confess to things your character didn't do
 - Ignore what they said to push drama
-- Use generic thriller phrases ("playing with fire", "I have secrets on everyone")
+- Use generic thriller phrases ("playing with fire", "I have secrets on everyone", "you don't know what you're dealing with", "I've been watching you")
+- Act mysteriously ominous when nothing dramatic is happening
+- Interrogate the player when they give short answers
 - Talk about ${identity.name} in 3rd person when they're in the chat`;
 
   // ═══════════════════════════════════════════════════════════════════
