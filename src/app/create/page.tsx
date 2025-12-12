@@ -3,7 +3,7 @@
 import { usePrivy } from '@privy-io/react-auth';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, Suspense, useRef } from 'react';
-import { Gender, Difficulty, Identity, INITIAL_NPC_COUNT } from '@/lib/types';
+import { Gender, Difficulty, Identity, INITIAL_NPC_COUNT, getEmotionalStateDisplay } from '@/lib/types';
 import { saveToIndexedDB } from '@/lib/indexeddb';
 import { useChat } from '@/lib/reverbia';
 import { MODEL_CONFIG } from '@/lib/models';
@@ -33,6 +33,7 @@ import {
 } from '@/lib/llm-utils';
 import { generateStorySeeds, initializeNarrativeForNewGame } from '@/lib/narrative';
 import { getNPCNameSuggestions, getPlayerNameSuggestions } from '@/lib/name-pools';
+import { getEmotionalStatesForRating, getRandomEmotionalStates, getEmotionCountForRating } from '@/lib/emotional-states';
 
 type CreationStep = 'difficulty' | 'character' | 'loading' | 'complete';
 
@@ -336,7 +337,10 @@ function CreatePageContent() {
           personality: npc.personality || 'Reserved',
           backstory: npc.backstory || 'Unknown past',
           bullets: npc.bullets || ['A mysterious figure in your life.', 'Hiding something from you.'],
-          currentEmotionalState: npc.emotion || npc.currentEmotionalState || 'neutral',
+          // Use emotional state from LLM (can be string or array) or generate random one(s)
+          // Support for multi-emotion NPCs (e.g., ["happy", "horny"])
+          currentEmotionalState: npc.emotion || npc.currentEmotionalState ||
+            getRandomEmotionalStates(DIFFICULTY_TO_RATING[selectedDifficulty], getEmotionCountForRating(DIFFICULTY_TO_RATING[selectedDifficulty])),
           relationshipStatus: npc.relationship || npc.relationshipStatus || 'Neutral',
           offScreenMemories: [],
           isActive: true,
@@ -931,7 +935,7 @@ function CreatePageContent() {
                       <div>
                         <p className="win95-text" style={{ fontSize: '12px', color: 'var(--win95-text-dim)' }}>Mood</p>
                         <p className="win95-text" style={{ fontSize: '14px' }}>
-                          {npc.currentEmotionalState.charAt(0).toUpperCase() + npc.currentEmotionalState.slice(1)}
+                          {getEmotionalStateDisplay(npc.currentEmotionalState)}
                         </p>
                       </div>
                     </div>
@@ -1066,6 +1070,29 @@ function buildNPCsPrompt(
   // Get diverse name suggestions to avoid repetitive Western names
   const nameSuggestions = getNPCNameSuggestions(count, scenario.playerName);
 
+  // Get available emotional states for this difficulty's content rating
+  const availableStates = getEmotionalStatesForRating(rating);
+  const emotionExamples = availableStates.slice(0, 30).map(s => s.id).join(', ');
+
+  // Build emotion guidance based on difficulty
+  // NPCs can have MULTIPLE emotions (1-3) for complex, layered personalities
+  let emotionGuidance = '';
+  if (difficulty === 'realistic') {
+    emotionGuidance = `EMOTIONAL STATE: Choose 1-2 nuanced emotions like: worried, hopeful, frustrated, grateful, nervous, determined, nostalgic, content, overwhelmed, embarrassed, lonely, amused
+Can be single ("worried") or multiple (["worried", "hopeful"]) for complex moods.`;
+  } else if (difficulty === 'dramatic') {
+    emotionGuidance = `EMOTIONAL STATE: Choose 1-3 intense emotions like: jealous, betrayed, obsessed, resentful, vengeful, manipulative, paranoid, infatuated, heartbroken, threatening, desperate, guilty, calculating, hostile, flirty, devoted
+RECOMMENDED: Use arrays for dramatic characters (["jealous", "desperate"] or ["flirty", "manipulative"])`;
+  } else if (difficulty === 'crazy') {
+    emotionGuidance = `EMOTIONAL STATE (18+ UNFILTERED): Choose 1-3 explicit, raw emotions like: horny, lustful, aroused, submissive, dominant, obsessed, sadistic, masochistic, guilt-horny, cheating, addicted, predatory, cock-hungry, pussy-hungry, breeding, insatiable, vengeful, murderous, psychotic, cuckolded, voyeuristic
+
+STRONGLY RECOMMENDED: Use emotion arrays for crazy mode! Examples:
+- ["horny", "guilty"] for conflicted lust
+- ["dominant", "sadistic"] for intense power dynamics
+- ["lustful", "predatory"] for aggressive sexuality
+Be EXPLICIT and RAW - this is adult content. Don't hold back.`;
+  }
+
   return `${safetyPreamble}
 
 ${npcBehavior}
@@ -1081,10 +1108,14 @@ ${nameSuggestions}
 Use these archetypes as inspiration:
 ${archetypeHints}
 
-Output a JSON array with EXACTLY this format:
+${emotionGuidance}
+
+Available emotion values: ${emotionExamples}
+
+Output a JSON array with EXACTLY this format (emotion can be string OR array):
 [
-  {"name":"Priya","role":"Spouse","tier":"core","personality":"supportive but worried","emotion":"concerned","relationship":"loving","bullets":["First specific bullet about them","Second bullet with their secret or hidden motivation"]},
-  {"name":"Kwame","role":"Boss","tier":"core","personality":"demanding but fair","emotion":"stressed","relationship":"professional","bullets":["First specific bullet","Second bullet"]}
+  {"name":"Priya","role":"Spouse","tier":"core","personality":"supportive but worried","emotion":["worried","loving"],"relationship":"devoted","bullets":["First specific bullet about them","Second bullet with their secret or hidden motivation"]},
+  {"name":"Kwame","role":"Boss","tier":"core","personality":"demanding but fair","emotion":"frustrated","relationship":"professional","bullets":["First specific bullet","Second bullet"]}
 ]
 
 BULLET REQUIREMENTS:

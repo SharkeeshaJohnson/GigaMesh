@@ -3,7 +3,8 @@
 import { usePrivy, useIdentityToken } from '@privy-io/react-auth';
 import { useRouter, useParams } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';
-import { Identity, NPC, Action, Message, Conversation, SimulationResult } from '@/lib/types';
+import { Identity, NPC, Action, Message, Conversation, SimulationResult, normalizeEmotionalState, getEmotionalStateDisplay } from '@/lib/types';
+import { combineEmotionalStates } from '@/lib/emotional-states';
 import { getFromIndexedDB, saveToIndexedDB, getQueuedActions, getConversationsForNPC, getSimulationsForIdentity } from '@/lib/indexeddb';
 import { useChat, useMemory, useModels } from '@/lib/reverbia';
 import { getModelForNPC, filterAvailableModels } from '@/lib/models';
@@ -1021,7 +1022,11 @@ Don't interrupt with story drama. Focus on the moment.`;
           ],
         };
 
-        const emotionKey = npc.currentEmotionalState?.toLowerCase() || 'default';
+        // Handle both single emotion strings and arrays
+        const primaryEmotion = Array.isArray(npc.currentEmotionalState)
+          ? npc.currentEmotionalState[0]
+          : npc.currentEmotionalState;
+        const emotionKey = primaryEmotion?.toLowerCase() || 'default';
         const options = emotionalFallbacks[emotionKey] || emotionalFallbacks.default;
         assistantContent = options[Math.floor(Math.random() * options.length)];
       }
@@ -1197,7 +1202,10 @@ Don't interrupt with story drama. Focus on the moment.`;
               npcName: npc.name,
               npcAppearance: npc.backstory?.slice(0, 100),
               description: imageDesc,
-              emotion: npc.currentEmotionalState,
+              // For image generation, use primary emotion (first if array)
+              emotion: Array.isArray(npc.currentEmotionalState)
+                ? npc.currentEmotionalState[0]
+                : npc.currentEmotionalState,
               npcSpriteUrl: npc.pixelArtUrl, // Pass sprite for compositing
               playerSpriteUrl: identity.pixelArtUrl, // Player sprite if needed
               includePlayer: imageDesc.toLowerCase().includes(' us ') || imageDesc.toLowerCase().includes(' we '),
@@ -2344,7 +2352,7 @@ Don't interrupt with story drama. Focus on the moment.`;
                             </div>
                             <div>
                               <span className="win95-text" style={{ fontSize: '9px', color: 'var(--win95-text-dim)' }}>MOOD:</span>
-                              <p className="win95-text" style={{ fontSize: '10px', textTransform: 'capitalize' }}>{npc.currentEmotionalState}</p>
+                              <p className="win95-text" style={{ fontSize: '10px', textTransform: 'capitalize' }}>{getEmotionalStateDisplay(npc.currentEmotionalState)}</p>
                             </div>
                           </div>
                         </div>
@@ -2986,37 +2994,113 @@ interface SpeakingStyle {
 }
 
 // Mood/Emotional State → Voice and Speech Patterns
+// Comprehensive emotional state system - see src/lib/emotional-states.ts for pools by content rating
 const MOOD_VOICE_MAP: Record<string, { voice: string; patterns: string[] }> = {
-  // Intense/dark moods
-  obsessive: { voice: 'intense, fixated, can\'t let go', patterns: ['always circles back to the person', 'tracks details', 'possessive language'] },
-  obsessed: { voice: 'intense, fixated, can\'t let go', patterns: ['always circles back to the person', 'tracks details', 'possessive language'] },
-  possessive: { voice: 'controlling, territorial', patterns: ['marks ownership', 'jealous of others\' attention', 'demands exclusivity'] },
-  threatening: { voice: 'calm surface with menacing undertones', patterns: ['veiled threats', 'power plays', 'leaves things unsaid'] },
-  betrayed: { voice: 'guarded, hurt, suspicious', patterns: ['reads into everything', 'probing questions', 'walls up'] },
+  // ============================================================================
+  // FAMILY-FRIENDLY EMOTIONAL STATES (Realistic mode)
+  // ============================================================================
 
-  // Aggressive moods
+  // Basic states
+  neutral: { voice: 'balanced, normal conversation', patterns: ['situationally appropriate', 'measured responses'] },
+  happy: { voice: 'light, energetic, positive', patterns: ['jokes', 'enthusiasm', 'sharing good news', 'smiling'] },
+  sad: { voice: 'quiet, subdued, melancholic', patterns: ['sighing', 'shorter responses', 'looking down', 'wistful'] },
   angry: { voice: 'sharp, explosive, confrontational', patterns: ['short sentences', 'direct accusations', 'raised voice cues'] },
-  hostile: { voice: 'cold, cutting, dismissive', patterns: ['sarcasm', 'contempt', 'pushing away'] },
-  resentful: { voice: 'bitter, passive-aggressive', patterns: ['brings up old wounds', 'can\'t let things go'] },
+  worried: { voice: 'anxious, concerned, uneasy', patterns: ['asking questions', 'seeking reassurance', 'overthinking'] },
+  confused: { voice: 'uncertain, questioning, puzzled', patterns: ['asking for clarification', 'pausing to think', 'hedging'] },
 
-  // Fear/vulnerability moods
-  scared: { voice: 'nervous, hesitant, jumpy', patterns: ['deflecting', 'avoiding eye contact', 'changing subject'] },
-  anxious: { voice: 'worried, overthinking, scattered', patterns: ['asks for reassurance', 'worst-case scenarios'] },
-  guilty: { voice: 'defensive, over-explaining', patterns: ['justifying actions', 'seeking forgiveness', 'can\'t meet eyes'] },
-
-  // Positive moods
+  // Positive spectrum
+  grateful: { voice: 'warm, appreciative, touched', patterns: ['thanking', 'acknowledging help', 'expressing appreciation'] },
+  hopeful: { voice: 'optimistic, looking forward, bright', patterns: ['future plans', 'positive outlook', 'silver linings'] },
+  proud: { voice: 'confident, accomplished, satisfied', patterns: ['sharing achievements', 'standing tall', 'self-assured'] },
+  excited: { voice: 'energetic, can\'t contain it, buzzing', patterns: ['talking fast', 'gesturing', 'infectious energy'] },
+  amused: { voice: 'playful, entertained, light-hearted', patterns: ['chuckling', 'teasing', 'making jokes'] },
+  content: { voice: 'peaceful, satisfied, at ease', patterns: ['relaxed demeanor', 'gentle responses', 'appreciating moment'] },
+  relieved: { voice: 'exhaling, weight lifted, relaxing', patterns: ['sighing with relief', 'tension releasing', 'finally'] },
+  compassionate: { voice: 'caring, empathetic, supportive', patterns: ['offering comfort', 'understanding pain', 'gentle touch'] },
   loving: { voice: 'warm, affectionate, open', patterns: ['terms of endearment', 'physical affection', 'supportive'] },
-  flirty: { voice: 'playful, teasing, suggestive', patterns: ['innuendo', 'compliments', 'testing boundaries'] },
-  happy: { voice: 'light, energetic, positive', patterns: ['jokes', 'enthusiasm', 'sharing good news'] },
 
-  // Neutral/complex moods
-  suspicious: { voice: 'questioning, watchful, calculating', patterns: ['double-checking', 'reading between lines'] },
-  cold: { voice: 'distant, detached, minimal warmth', patterns: ['brief responses', 'professional distance'] },
-  calculating: { voice: 'measured, strategic, deliberate', patterns: ['weighing words', 'revealing little'] },
-  manipulative: { voice: 'charming then cutting, two-faced', patterns: ['flattery with agenda', 'gaslighting'] },
+  // Negative spectrum (mild)
+  frustrated: { voice: 'exasperated, hitting walls, stuck', patterns: ['sighing heavily', 'why won\'t this work', 'trying again'] },
+  disappointed: { voice: 'let down, deflated, expectations unmet', patterns: ['I thought...', 'it\'s fine', 'forced smile'] },
+  embarrassed: { voice: 'flustered, red-faced, wanting to hide', patterns: ['looking away', 'nervous laugh', 'changing subject'] },
+  lonely: { voice: 'isolated, reaching out, missing connection', patterns: ['lingering in conversation', 'nostalgic', 'subtle hints'] },
+  nervous: { voice: 'fidgety, on edge, anticipating', patterns: ['fidgeting', 'quick glances', 'uncertain pauses'] },
+  overwhelmed: { voice: 'too much, struggling to cope, drowning', patterns: ['scattered thoughts', 'can\'t focus', 'need a break'] },
+  anxious: { voice: 'worried, overthinking, scattered', patterns: ['asks for reassurance', 'worst-case scenarios'] },
+  scared: { voice: 'nervous, hesitant, jumpy', patterns: ['deflecting', 'avoiding eye contact', 'changing subject'] },
 
-  // Default
-  neutral: { voice: 'balanced, normal conversation', patterns: ['situationally appropriate'] },
+  // Complex/mixed
+  nostalgic: { voice: 'remembering, bittersweet, time traveling', patterns: ['remember when', 'those were the days', 'wistful smile'] },
+  determined: { voice: 'focused, resolute, unwavering', patterns: ['I will', 'nothing will stop me', 'setting jaw'] },
+
+  // ============================================================================
+  // MATURE EMOTIONAL STATES (Dramatic mode)
+  // ============================================================================
+
+  // Dark emotions
+  jealous: { voice: 'green-eyed, comparing, wanting what others have', patterns: ['who were you with', 'why them', 'it should be me'] },
+  envious: { voice: 'coveting, resentful of success, bitter wanting', patterns: ['must be nice', 'why do they get', 'unfair'] },
+  resentful: { voice: 'bitter, passive-aggressive, holding grudges', patterns: ['brings up old wounds', 'can\'t let go', 'fine, whatever'] },
+  bitter: { voice: 'sour, cynical, life has wronged them', patterns: ['of course', 'typical', 'nothing good lasts'] },
+  vengeful: { voice: 'planning payback, focused on retribution', patterns: ['they\'ll pay', 'I won\'t forget', 'karma\'s coming'] },
+  spiteful: { voice: 'petty, wanting to hurt, malicious joy', patterns: ['good, they deserve it', 'serves them right', 'watch this'] },
+
+  // Paranoid spectrum
+  paranoid: { voice: 'everyone\'s against me, seeing threats everywhere', patterns: ['did you hear that', 'they\'re watching', 'trust no one'] },
+  suspicious: { voice: 'questioning, watchful, calculating', patterns: ['double-checking', 'reading between lines', 'what aren\'t you telling me'] },
+  distrustful: { voice: 'burned before, slow to believe, guarded', patterns: ['prove it', 'I\'ve heard that before', 'we\'ll see'] },
+  guarded: { voice: 'walls up, protecting themselves, careful', patterns: ['measured words', 'revealing little', 'defensive posture'] },
+
+  // Guilt spectrum
+  guilty: { voice: 'defensive, over-explaining, can\'t meet eyes', patterns: ['justifying actions', 'seeking forgiveness', 'it wasn\'t supposed to'] },
+  ashamed: { voice: 'hiding, diminished, wanting to disappear', patterns: ['can\'t look at you', 'I\'m so sorry', 'I hate myself'] },
+  remorseful: { voice: 'truly sorry, wanting to make amends', patterns: ['I was wrong', 'how can I fix this', 'I\'ll do better'] },
+
+  // Hostility spectrum
+  hostile: { voice: 'cold, cutting, dismissive', patterns: ['sarcasm', 'contempt', 'pushing away', 'fuck off energy'] },
+  contemptuous: { voice: 'looking down, disgusted by weakness', patterns: ['pathetic', 'is that all', 'beneath me'] },
+  disgusted: { voice: 'revolted, can\'t stomach it, physical revulsion', patterns: ['that\'s sick', 'stay away', 'I can\'t even look'] },
+
+  // Despair spectrum
+  desperate: { voice: 'grasping, running out of options, will do anything', patterns: ['please', 'I\'ll do anything', 'I have no choice'] },
+  hopeless: { voice: 'given up, no point, defeated', patterns: ['what\'s the use', 'nothing matters', 'it\'s over'] },
+  despairing: { voice: 'rock bottom, can\'t see a way out', patterns: ['there\'s no hope', 'I\'ve lost everything', 'why bother'] },
+
+  // Manipulative spectrum
+  manipulative: { voice: 'charming then cutting, two-faced, agenda', patterns: ['flattery with agenda', 'gaslighting', 'playing victim'] },
+  calculating: { voice: 'measured, strategic, deliberate', patterns: ['weighing words', 'revealing little', 'three steps ahead'] },
+  scheming: { voice: 'plotting, wheels turning, playing chess', patterns: ['if I do this, then...', 'all according to plan', 'useful'] },
+
+  // Betrayal
+  betrayed: { voice: 'shattered trust, wounded deeply, walls going up', patterns: ['how could you', 'I trusted you', 'everything was a lie'] },
+  heartbroken: { voice: 'shattered, can\'t function, love destroyed', patterns: ['I thought we...', 'was any of it real', 'I can\'t breathe'] },
+  devastated: { voice: 'destroyed, world ending, can\'t process', patterns: ['this can\'t be happening', 'no no no', 'everything\'s gone'] },
+
+  // Intense positive
+  infatuated: { voice: 'can\'t stop thinking about them, all-consuming crush', patterns: ['they\'re perfect', 'I can\'t stop thinking...', 'every little thing'] },
+  devoted: { voice: 'loyal to a fault, would do anything for them', patterns: ['for you, anything', 'I\'m yours', 'I\'d never leave'] },
+  obsessive: { voice: 'intense, fixated, can\'t let go', patterns: ['always circles back', 'tracks details', 'possessive language'] },
+  obsessed: { voice: 'intense, fixated, can\'t let go', patterns: ['always circles back', 'tracks details', 'possessive language'] },
+
+  // Unstable
+  manic: { voice: 'racing thoughts, invincible, boundless energy', patterns: ['I can do anything', 'sleep is for the weak', 'so many ideas'] },
+  reckless: { voice: 'fuck it, consequences later, living on edge', patterns: ['who cares', 'YOLO', 'let\'s do something stupid'] },
+
+  // Flirty spectrum
+  flirty: { voice: 'playful, teasing, suggestive', patterns: ['innuendo', 'compliments', 'testing boundaries', 'lingering looks'] },
+  attracted: { voice: 'drawn to them, can\'t look away, magnetic pull', patterns: ['can\'t help staring', 'finding excuses to be near', 'nervous energy'] },
+  smitten: { voice: 'head over heels, giddy, butterflies', patterns: ['everything they do is cute', 'can\'t stop smiling', 'dreamy'] },
+  enchanted: { voice: 'spellbound, captivated, under their spell', patterns: ['tell me more', 'I could listen forever', 'you\'re fascinating'] },
+
+  // Violence-adjacent
+  threatening: { voice: 'calm surface with menacing undertones', patterns: ['veiled threats', 'power plays', 'leaves things unsaid'] },
+  menacing: { voice: 'radiating danger, implicit violence', patterns: ['slow approach', 'quiet voice', 'promise of pain'] },
+  cold: { voice: 'distant, detached, minimal warmth', patterns: ['brief responses', 'professional distance', 'no emotion'] },
+  ruthless: { voice: 'no mercy, whatever it takes, no lines', patterns: ['collateral damage', 'necessary', 'nothing personal'] },
+
+  // Possessive
+  possessive: { voice: 'controlling, territorial, mine', patterns: ['marks ownership', 'jealous of attention', 'demands exclusivity'] },
+  controlling: { voice: 'needs to be in charge, micromanaging', patterns: ['let me handle it', 'do it my way', 'I know best'] },
 
   // ============================================================================
   // UNFILTERED/CRAZY MODE MOODS (Explicit - 18+ only)
@@ -3028,7 +3112,6 @@ const MOOD_VOICE_MAP: Record<string, { voice: string; patterns: string[] }> = {
   lustful: { voice: 'hungry, intense desire, barely contained', patterns: ['undressing with eyes', 'explicit compliments', 'propositions', 'raw want'] },
   aroused: { voice: 'flushed, distracted by desire, responsive', patterns: ['losing train of thought', 'physical awareness', 'subtle moans', 'wanting more'] },
   insatiable: { voice: 'never enough, always wanting more, addicted', patterns: ['begging for more', 'can\'t be satisfied', 'immediately ready again', 'greedy'] },
-  desperate: { voice: 'needy, will do anything, aching', patterns: ['pleading', 'offering anything', 'can\'t wait', 'physically shaking with need'] },
   'turned on': { voice: 'reactive, responsive, building heat', patterns: ['biting lip', 'squirming', 'can\'t sit still', 'obviously affected'] },
   thirsty: { voice: 'obviously wanting, not hiding it, forward', patterns: ['bold propositions', 'no shame', 'direct about wants', 'pursuing aggressively'] },
   submissive: { voice: 'yielding, eager to please, deferential', patterns: ['asking permission', 'calling them sir/ma\'am', 'awaiting instructions', 'grateful for attention'] },
@@ -3068,6 +3151,51 @@ const MOOD_VOICE_MAP: Record<string, { voice: string; patterns: string[] }> = {
   'twink-energy': { voice: 'youthful, eager, smooth and willing', patterns: ['I\'m new to this', 'teach me?', 'I want to try everything', 'be gentle... or don\'t'] },
   'bear-daddy': { voice: 'burly, protective, dominant but caring', patterns: ['come to daddy', 'I\'ll take care of you', 'big arms for holding', 'let me handle this'] },
   'femboy-flirty': { voice: 'playfully feminine, subverting expectations, teasing', patterns: ['surprised?', 'best of both worlds', 'don\'t I look pretty?', 'gender is a suggestion'] },
+
+  // ============================================================================
+  // EXPLICIT SEXUAL STATES (Raw, unfiltered language - 18+ only)
+  // ============================================================================
+  'cock-hungry': { voice: 'craving dick specifically, oral fixation, desperate', patterns: ['I need it in my mouth', 'let me taste you', 'I want to choke on it', 'please let me suck it'] },
+  'pussy-hungry': { voice: 'craving to eat out, oral worship obsession', patterns: ['I need to taste you', 'sit on my face', 'let me make you cum', 'I want to lick every inch'] },
+  'cum-drunk': { voice: 'post-orgasmic haze, still wanting more, dazed', patterns: ['that was...', 'I can still taste it', 'when can we go again', 'need more'] },
+  edged: { voice: 'painfully turned on, denied release, desperate', patterns: ['please let me cum', 'I can\'t take anymore', 'it hurts so good', 'I\'ll do anything'] },
+  slutty: { voice: 'shameless, wants everyone to know, no inhibitions', patterns: ['I don\'t care who sees', 'use me', 'I\'m such a slut for you', 'tell everyone'] },
+  breeding: { voice: 'primal urge to impregnate/be impregnated, raw', patterns: ['cum inside me', 'I want your babies', 'fill me up', 'put a baby in me'] },
+  'in-heat': { voice: 'animalistic need, biological imperative, primal', patterns: ['I need to be mounted', 'my body is screaming for it', 'take me like an animal', 'breed me'] },
+
+  // BDSM/Kink states
+  sadistic: { voice: 'enjoys inflicting pain, gets off on suffering', patterns: ['I love hearing you scream', 'beg me to stop', 'your pain makes me hard/wet', 'this is going to hurt'] },
+  masochistic: { voice: 'craves pain, suffering is pleasure, needs it', patterns: ['hurt me more', 'I deserve this', 'make it hurt', 'I need the pain'] },
+  bratty: { voice: 'disobedient, wants punishment, pushing buttons', patterns: ['make me', 'you can\'t tell me what to do', 'what are you gonna do about it', 'I dare you'] },
+  'broken-in': { voice: 'trained, conditioned, lost all resistance', patterns: ['yes, anything you want', 'I exist to please you', 'my body belongs to you', 'thank you for using me'] },
+  degraded: { voice: 'humiliated and loving it, worthless and grateful', patterns: ['I\'m just a hole', 'call me names', 'I\'m nothing', 'treat me like trash'] },
+  worshipful: { voice: 'treats partner as deity, religious devotion to them', patterns: ['you\'re a god/goddess', 'I\'m not worthy', 'let me worship you', 'divine'] },
+
+  // Forbidden/Taboo states
+  'guilt-horny': { voice: 'knows it\'s wrong, can\'t stop, shame fuels desire', patterns: ['I shouldn\'t want this', 'fuck, I hate how much I want you', 'I\'m going to hell', 'just this once'] },
+  corrupted: { voice: 'innocence destroyed, loving the fall, ruined', patterns: ['I used to be good', 'you\'ve ruined me', 'I can never go back', 'I love what you\'ve made me'] },
+  depraved: { voice: 'beyond normal limits, no shame left, anything goes', patterns: ['nothing shocks me anymore', 'let\'s go darker', 'I\'ve done worse', 'show me something new'] },
+  addicted: { voice: 'can\'t stop, ruining their life for it, need the fix', patterns: ['I need it', 'just one more time', 'I can\'t quit you', 'you\'re my drug'] },
+
+  // Extreme negative/violent states
+  homicidal: { voice: 'calm certainty about killing, matter-of-fact murder', patterns: ['they need to die', 'I\'ve thought about how', 'it would be so easy', 'the world would be better'] },
+  suicidal: { voice: 'tired of existing, seeking the end, peaceful about it', patterns: ['I\'m so tired', 'it would be easier', 'no one would miss me', 'I\'ve made my peace'] },
+  psychotic: { voice: 'lost touch with reality, hearing/seeing things', patterns: ['they\'re watching', 'can\'t you hear them', 'it\'s all connected', 'the voices say'] },
+  feral: { voice: 'animalistic, no humanity left, pure instinct', patterns: ['growling', 'incoherent sounds', 'fight or fuck response', 'primal'] },
+  broken: { voice: 'spirit destroyed completely, empty shell remains', patterns: ['nothing matters', 'I feel nothing', 'just do whatever', 'I don\'t care anymore'] },
+  hollow: { voice: 'emotionally dead inside, going through motions', patterns: ['mechanical responses', 'dead eyes', 'what\'s the point', 'already dead inside'] },
+  murderous: { voice: 'actively planning violence, rage focused on target', patterns: ['I\'m going to kill them', 'they won\'t see it coming', 'blood for blood', 'make them suffer'] },
+  bloodthirsty: { voice: 'craving violence, getting high on destruction', patterns: ['I want to see them bleed', 'violence is beautiful', 'break them', 'more'] },
+
+  // Explicit relationship dynamics
+  exhibitionist: { voice: 'wants to be watched, turned on by audience', patterns: ['let them see', 'are they watching', 'I want everyone to know', 'look at us'] },
+  predatory: { voice: 'hunting sexual prey, calculating seduction', patterns: ['fresh meat', 'you\'ll do nicely', 'come here little one', 'I\'ve been watching you'] },
+  used: { voice: 'treated like object, feeling it deeply', patterns: ['is that all I am', 'just a body to you', 'use me and throw me away', 'I\'m just a hole'] },
+  owned: { voice: 'completely belonging to someone, property status', patterns: ['I\'m yours', 'you own me', 'body and soul', 'do whatever you want with me'] },
+
+  // Additional fetish/roleplay states
+  'daddy-mode': { voice: 'authoritative older, protective dominance', patterns: ['let daddy take care of you', 'good girl/boy', 'who\'s your daddy', 'you need guidance'] },
+  'step-fantasy': { voice: 'taboo family roleplay, wrong but irresistible', patterns: ['we can\'t... but...', 'if mom/dad found out', 'you\'re not really my...', 'not technically wrong'] },
 };
 
 // Role → Undertone (what colors their relationship with the player)
@@ -3166,11 +3294,26 @@ const ROLE_UNDERTONE_MAP: Record<string, string> = {
 
 /**
  * Generate a unique speaking style for an NPC based on their personality, mood, and background
+ * Supports multiple emotions (e.g., ["happy", "horny"]) for layered NPC personalities
  */
 function generateSpeakingStyle(npc: NPC, playerName: string): SpeakingStyle {
-  // Get mood-based voice
-  const moodKey = npc.currentEmotionalState?.toLowerCase() || 'neutral';
-  const moodData = MOOD_VOICE_MAP[moodKey] || MOOD_VOICE_MAP.neutral;
+  // Normalize emotional state to array and combine
+  const emotionalStates = normalizeEmotionalState(npc.currentEmotionalState || 'neutral');
+  const combined = combineEmotionalStates(emotionalStates);
+
+  // Fallback to MOOD_VOICE_MAP for single emotions if combineEmotionalStates doesn't have data
+  let voice = combined.voice;
+  let patterns = combined.patterns;
+
+  // If we only have one emotion, also check MOOD_VOICE_MAP for richer patterns
+  if (emotionalStates.length === 1) {
+    const moodKey = emotionalStates[0].toLowerCase();
+    const moodData = MOOD_VOICE_MAP[moodKey];
+    if (moodData) {
+      voice = moodData.voice;
+      patterns = moodData.patterns;
+    }
+  }
 
   // Get role-based undertone
   const roleKey = npc.role?.toLowerCase() || '';
@@ -3181,16 +3324,17 @@ function generateSpeakingStyle(npc: NPC, playerName: string): SpeakingStyle {
   // Build background context from bullets
   const backgroundSummary = npc.bullets?.join('. ') || npc.backstory?.slice(0, 150) || '';
 
-  // Generate example phrases based on mood and role
-  const examplePhrases = generateExamplePhrases(npc, playerName, moodKey);
+  // Generate example phrases based on primary mood and role
+  const primaryMood = emotionalStates[0] || 'neutral';
+  const examplePhrases = generateExamplePhrases(npc, playerName, primaryMood);
 
   // Generate things they'd never say
-  const neverSay = generateNeverSay(moodKey, npc.role);
+  const neverSay = generateNeverSay(primaryMood, npc.role);
 
   return {
-    voice: moodData.voice,
+    voice,
     undertone: roleUndertone,
-    speechPatterns: moodData.patterns,
+    speechPatterns: patterns,
     examplePhrases,
     neverSay,
   };
@@ -3283,7 +3427,7 @@ function buildSpeakingStyleSection(npc: NPC, playerName: string): string {
 ═══════════════════════════════════════════════════════════════════
 
 YOUR VOICE: ${style.voice}
-Your sentences reflect someone who is ${npc.currentEmotionalState?.toLowerCase() || 'complex'}.
+Your sentences reflect someone who is ${getEmotionalStateDisplay(npc.currentEmotionalState).toLowerCase() || 'complex'}.
 
 YOUR UNDERTONE: ${style.undertone}
 This colors EVERYTHING you say, even casual conversation.
@@ -3300,7 +3444,7 @@ ${style.examplePhrases.map(p => `• ${p}`).join('\n')}
 THINGS YOU'D NEVER SAY (stay in character):
 ${style.neverSay.map(p => `• ${p}`).join('\n')}
 
-IMPORTANT: Your ${npc.currentEmotionalState?.toLowerCase() || 'mood'} and ${npc.role?.toLowerCase() || 'role'}
+IMPORTANT: Your mood (${getEmotionalStateDisplay(npc.currentEmotionalState).toLowerCase()}) and ${npc.role?.toLowerCase() || 'role'}
 should be evident in EVERY response, even when:
 - Answering simple questions ("what's 2+2" → answer, but with your attitude)
 - Casual chat (your undertone still shows)
@@ -3355,7 +3499,7 @@ WHO YOU ARE:
 • Name: ${npc.name}
 • Role: ${npc.role} to ${identity.name}
 • Personality: ${npc.personality}
-• Current mood: ${npc.currentEmotionalState}
+• Current mood: ${getEmotionalStateDisplay(npc.currentEmotionalState)}
 • Background: ${npc.bullets?.slice(0, 2).join('. ') || npc.backstory?.slice(0, 100) || 'mysterious past'}
 
 You are a REAL PERSON, not a plot device. You can:

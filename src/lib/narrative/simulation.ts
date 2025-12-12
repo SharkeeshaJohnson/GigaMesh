@@ -265,8 +265,11 @@ function generateNPCAgendas(
       }
     }
 
-    // Generate goals from emotional state
-    const emotion = npc.currentEmotionalState.toLowerCase();
+    // Generate goals from emotional state - handle arrays
+    const emotionalStates = Array.isArray(npc.currentEmotionalState)
+      ? npc.currentEmotionalState
+      : [npc.currentEmotionalState];
+    const emotion = emotionalStates.join(' ').toLowerCase();
     if (emotion.includes('angry') || emotion.includes('bitter')) {
       goals.push('Seek confrontation or vindication');
       willDo.push('Pick fights or make accusations');

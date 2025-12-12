@@ -304,19 +304,23 @@ function determineStrategy(
   conflicts: GroupConflict[],
   allies: string[]
 ): ConversationAgenda['currentStrategy'] {
-  const emotion = npc.currentEmotionalState.toLowerCase();
+  // Handle both single emotion strings and arrays
+  const emotionalStates = Array.isArray(npc.currentEmotionalState)
+    ? npc.currentEmotionalState
+    : [npc.currentEmotionalState];
+  const emotionString = emotionalStates.join(' ').toLowerCase();
 
   // Emotional state drives strategy
-  if (emotion.includes('angry') || emotion.includes('furious')) {
+  if (emotionString.includes('angry') || emotionString.includes('furious')) {
     return 'aggressive';
   }
-  if (emotion.includes('scared') || emotion.includes('anxious')) {
+  if (emotionString.includes('scared') || emotionString.includes('anxious')) {
     return 'defensive';
   }
-  if (emotion.includes('suspicious') || emotion.includes('calculating')) {
+  if (emotionString.includes('suspicious') || emotionString.includes('calculating')) {
     return 'manipulative';
   }
-  if (emotion.includes('loving') || emotion.includes('supportive')) {
+  if (emotionString.includes('loving') || emotionString.includes('supportive')) {
     return 'supportive';
   }
 
@@ -342,8 +346,11 @@ function generateGoals(
 ): string[] {
   const goals: string[] = [];
 
-  // Base goal from emotional state
-  const emotion = npc.currentEmotionalState.toLowerCase();
+  // Base goal from emotional state - handle both single string and arrays
+  const emotionalStates = Array.isArray(npc.currentEmotionalState)
+    ? npc.currentEmotionalState
+    : [npc.currentEmotionalState];
+  const emotion = emotionalStates.join(' ').toLowerCase();
 
   if (emotion.includes('angry')) {
     goals.push('Confront someone about what\'s making you angry');

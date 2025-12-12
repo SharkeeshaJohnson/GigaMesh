@@ -69,8 +69,11 @@ function inferRelationshipMetrics(npc: NPC, identity: Identity): RelationshipMet
     metrics.rivalry = 30;
   }
 
-  // Adjust based on emotional state
-  const emotion = npc.currentEmotionalState.toLowerCase();
+  // Adjust based on emotional state - handle arrays
+  const emotionalStates = Array.isArray(npc.currentEmotionalState)
+    ? npc.currentEmotionalState
+    : [npc.currentEmotionalState];
+  const emotion = emotionalStates.join(' ').toLowerCase();
   if (emotion.includes('angry') || emotion.includes('bitter') || emotion.includes('resentful')) {
     metrics.affection -= 15;
     metrics.trust -= 10;
