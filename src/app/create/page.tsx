@@ -31,7 +31,7 @@ import {
   parseJSONSafely,
   parseJSONArraySafely,
 } from '@/lib/llm-utils';
-import { initializeNarrativeForNewGame, generateDay1Scenario, generateNPCStorySeeds } from '@/lib/narrative';
+import { initializeNarrativeForNewGame, generateDay1Scenario } from '@/lib/narrative';
 import { getNPCNameSuggestions, getPlayerNameSuggestions } from '@/lib/name-pools';
 import { getEmotionalStatesForRating, getRandomEmotionalStates, getEmotionCountForRating } from '@/lib/emotional-states';
 
@@ -351,9 +351,8 @@ function CreatePageContent() {
           isActive: true,
           pixelArtUrl: npcSpriteUrls[index] || '',
           emotionSprites: {},
-          // NEW: Individual NPC story system (populated below)
+          // Opening scenario generated below
           openingScenario: '',
-          storySeeds: [],
           scenarioUsed: false,
         })),
         createdAt: new Date(),
@@ -363,15 +362,13 @@ function CreatePageContent() {
       const narrativeState = initializeNarrativeForNewGame(newIdentity);
       newIdentity.narrativeState = narrativeState;
 
-      // Generate per-NPC opening scenarios and story seeds (NEW system)
-      // Each NPC gets their own individual stories for 1:1 chats
+      // Generate per-NPC opening scenarios
+      // Each NPC gets their own tailored scenario for 1:1 chats
       newIdentity.npcs = newIdentity.npcs.map(npc => {
         const openingScenario = generateDay1Scenario(npc, newIdentity);
-        const npcStorySeeds = generateNPCStorySeeds(npc, newIdentity, 2);
         return {
           ...npc,
           openingScenario,
-          storySeeds: npcStorySeeds,
           scenarioUsed: false,
         };
       });

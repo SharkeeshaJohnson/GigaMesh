@@ -1,18 +1,16 @@
 export type NPCOrigin = 'guaranteed' | 'emergent';
 
 /**
- * NPC-specific story seed - individual stories for 1:1 chats
- * Unlike the old cross-NPC system, each NPC has their own isolated seeds
+ * NPC character in the game.
+ *
+ * SIMPLIFIED SYSTEM:
+ * - openingScenario: Shown when user first opens 1:1 chat each day
+ * - offScreenMemories: Populated by simulations, used to generate new scenarios
+ * - scenarioUsed: Reset after simulation so NPCs show new scenarios next day
+ *
+ * NO memory extraction, NO story seeds, NO complex tracking.
+ * Just: scenarios (based on simulation events) + free-flowing chat.
  */
-export interface NPCStorySeed {
-  id: string;
-  fact: string; // The story/secret this NPC can share
-  type: 'secret' | 'confession' | 'rumor' | 'past_event';
-  severity: 'minor' | 'moderate' | 'major' | 'explosive';
-  revealedToPlayer: boolean;
-  narrativePriority: number; // Lower = reveal sooner
-}
-
 export interface NPC {
   id: string;
   name: string;
@@ -27,7 +25,7 @@ export interface NPC {
   // Multiple emotions allow for complex, layered NPC moods
   currentEmotionalState: string | string[];
   relationshipStatus: string; // with player
-  offScreenMemories: string[]; // events player doesn't know
+  offScreenMemories: string[]; // Events from simulations - used to generate opening scenarios
   isActive: boolean; // can player chat with them
   isDead?: boolean; // NPC has died (killed, suicide, etc.)
   deathDay?: number; // Day they died
@@ -36,10 +34,9 @@ export interface NPC {
   emotionSprites: Record<string, string>; // emotion -> sprite URL
   assignedModel?: string; // LLM model assigned to this NPC for varied responses
 
-  // === NEW: Individual NPC story system ===
+  // Opening scenario system (simple, no story seeds)
   openingScenario: string; // The scenario shown when user first opens 1:1 chat
-  storySeeds: NPCStorySeed[]; // Individual stories for this NPC (used in 1:1 chats only)
-  scenarioUsed: boolean; // Has the current opening scenario been shown?
+  scenarioUsed: boolean; // Has the current opening scenario been shown? Reset after simulation.
 }
 
 /**

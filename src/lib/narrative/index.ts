@@ -63,25 +63,11 @@ export type {
 } from './types';
 
 // =============================================================================
-// STORY SEEDS (Simplified - integrated into auto-chat directive)
-// =============================================================================
-
-export type {
-  StorySeed,
-} from './story-seeds';
-
-export {
-  generateStorySeeds,
-  markSeedRevealed,
-} from './story-seeds';
-
-// =============================================================================
-// SCENARIO GENERATOR (NEW: Per-NPC story system)
+// SCENARIO GENERATOR - Opening scenarios for 1:1 chats
 // =============================================================================
 
 export {
   generateDay1Scenario,
-  generateNPCStorySeeds,
   generateEventBasedScenario,
   generateRandomScenario,
   severityScore,

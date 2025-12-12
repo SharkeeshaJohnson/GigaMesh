@@ -1,5 +1,5 @@
 import { NPC } from './npc';
-import type { StorySeed, NarrativeState } from '../narrative';
+import type { NarrativeState } from '../narrative';
 
 export type Gender = 'male' | 'female';
 export type Difficulty = 'realistic' | 'dramatic' | 'crazy';
@@ -108,10 +108,6 @@ export interface Identity {
   currentDay: number;
   meters: Meters;
   npcs: NPC[]; // Starting NPCs (more can spawn through gameplay)
-  // DEPRECATED: storySeeds moved to individual NPCs (npc.storySeeds)
-  // This field is kept for backwards compatibility with old saves only
-  // New system: Each NPC has their own storySeeds for 1:1 chats
-  storySeeds?: StorySeed[];
   narrativeState?: NarrativeState; // Full narrative engine state
   playerActions?: PlayerAction[]; // NEW: Things player has said/done (butterfly effect)
   simulationHistory?: SimulationHistoryEntry[]; // Recent simulation events for reference

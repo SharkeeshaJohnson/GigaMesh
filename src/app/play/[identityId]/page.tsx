@@ -6,7 +6,7 @@ import { useEffect, useState, useRef } from 'react';
 import { Identity, NPC, Action, Message, Conversation, SimulationResult, normalizeEmotionalState, getEmotionalStateDisplay } from '@/lib/types';
 import { combineEmotionalStates } from '@/lib/emotional-states';
 import { getFromIndexedDB, saveToIndexedDB, getQueuedActions, getConversationsForNPC, getSimulationsForIdentity } from '@/lib/indexeddb';
-import { useChat, useMemory, useModels } from '@/lib/reverbia';
+import { useChat, useModels } from '@/lib/reverbia';
 import { getModelForNPC, filterAvailableModels } from '@/lib/models';
 import { parseImageTags, inferImageType, generateCharacterConsistentImage } from '@/lib/image-generation';
 import { cacheChatImage, getCachedChatImage, getBreathingAnimationFrames } from '@/lib/sprite-cache';
@@ -254,8 +254,6 @@ export default function GamePage() {
     },
   });
 
-  const { searchMemories, extractMemoriesFromMessage } = useMemory(); // Memory functions from Reverbia SDK
-
   // Debug: List available models
   const { models } = useModels();
   useEffect(() => {
@@ -443,24 +441,23 @@ export default function GamePage() {
             }
           });
 
-          // Migration: Generate NPC-specific story seeds and opening scenarios for existing saves
-          const { generateDay1Scenario, generateNPCStorySeeds } = await import('@/lib/narrative');
-          let npcMigrationCount = 0;
+          // Migration: Generate opening scenarios for existing saves
+          const { generateDay1Scenario } = await import('@/lib/narrative');
+          let scenarioMigrationCount = 0;
           loadedIdentity.npcs = loadedIdentity.npcs.map((npc: NPC) => {
-            let updated = { ...npc };
-            if (!npc.storySeeds || npc.storySeeds.length === 0) {
-              updated.storySeeds = generateNPCStorySeeds(npc, loadedIdentity, 2);
-              npcMigrationCount++;
-            }
             if (!npc.openingScenario) {
-              updated.openingScenario = generateDay1Scenario(npc, loadedIdentity);
-              updated.scenarioUsed = false;
+              scenarioMigrationCount++;
+              return {
+                ...npc,
+                openingScenario: generateDay1Scenario(npc, loadedIdentity),
+                scenarioUsed: false,
+              };
             }
-            return updated;
+            return npc;
           });
-          if (npcMigrationCount > 0) {
+          if (scenarioMigrationCount > 0) {
             needsSave = true;
-            console.log(`[Migration] Generated story seeds for ${npcMigrationCount} NPCs`);
+            console.log(`[Migration] Generated opening scenarios for ${scenarioMigrationCount} NPCs`);
           }
 
           // Migration: Initialize narrativeState for existing saves that don't have it
@@ -891,47 +888,18 @@ Other people here: ${otherNames}
 NO HIDDEN AGENDAS. NO SECRETS TO REVEAL. JUST VIBES.`;
       }
 
-      // Get model for this NPC (uses assigned model for variety, falls back to tier-based)
+      // Get model for this NPC (uses assigned model for variety)
       const model = getModelForNPC(npc);
       console.log(`[NPC Model] ${npc.name} using: ${model} (full path)`);
 
-      // MEMORY SYSTEM: Search for relevant memories from past conversations
-      // ONLY for 1:1 chats - group chat is personality-only with no memory
-      let relevantMemories: string[] = [];
       const is1to1Chat = conversationNpcIds.length === 1;
 
-      if (is1to1Chat) {
-        try {
-          // Get the last message to use as search query
-          const lastUserMsg = recentMessages.filter(m => m.role === 'user').pop();
-          const searchQuery = lastUserMsg?.content || `conversation with ${identity.name}`;
-
-          // Search for memories related to this NPC and player
-          // SDK signature: searchMemories(query: string, limit?: number, minSimilarity?: number)
-          const queryString = `${npc.name} ${identity.name} ${searchQuery}`;
-          console.log(`[Memory Search] Searching for: "${queryString.substring(0, 50)}..."`);
-          const memoryResults = await searchMemories(queryString, 5, 0.5);
-
-          if (memoryResults && Array.isArray(memoryResults) && memoryResults.length > 0) {
-            relevantMemories = memoryResults
-              .map((m: any) => m.content || m.text || m.memory)
-              .filter(Boolean)
-              .slice(0, 3); // Max 3 memories to keep prompt short
-            console.log(`[Memory] Found ${relevantMemories.length} memories for ${npc.name}`);
-          }
-        } catch (err) {
-          // Memory search is optional - don't fail the whole request
-          console.log(`[Memory] Search unavailable for ${npc.name}:`, err);
-        }
-      }
-
-      // Build system prompt with all options including memories
+      // Build system prompt - SIMPLIFIED: no memory system, just free-flowing chat
       const promptOptions = {
         isAutoChat,
         autoChatMessageCount: autoChatCount,
         shouldAskPlayerQuestion,
-        memories: relevantMemories,
-        inRoleplayMode, // Pass roleplay detection to prompt builder
+        inRoleplayMode,
       };
 
       // Include recent responses from synchronous ref in messages for banned phrase extraction
@@ -1132,81 +1100,6 @@ NO HIDDEN AGENDAS. NO SECRETS TO REVEAL. JUST VIBES.`;
 
       // Add message immediately (possibly with loading state for image)
       setMessages((prev) => [...prev, npcMessage]);
-
-      // MEMORY SYSTEM: Extract memories from the conversation
-      // ONLY for 1:1 chats - group chat is personality-only with no memory
-      if (is1to1Chat && extractMemoriesFromMessage && assistantContent && assistantContent.length > 20) {
-        try {
-          // Get the last user message to pair with the NPC response
-          const lastUserMsg = recentMessages.filter(m => m.role === 'user').pop();
-
-          // Build messages array for memory extraction
-          const conversationToExtract = [
-            ...(lastUserMsg ? [{ role: 'user', content: lastUserMsg.content || '' }] : []),
-            { role: 'assistant', content: assistantContent },
-          ];
-
-          // Extract memories using the SDK's semantic extraction
-          await extractMemoriesFromMessage({
-            messages: conversationToExtract,
-            model: 'fireworks/accounts/fireworks/models/qwen3-8b', // Use fast model for extraction
-          });
-          console.log(`[Memory] Extracted memories from ${npc.name}'s response`);
-        } catch (err) {
-          // Memory extraction is optional - don't fail the whole request
-          console.log(`[Memory] Extraction unavailable:`, err);
-        }
-      }
-
-      // CROSS-CONVERSATION MEMORY: Extract facts from auto-chat and store in NPC memory
-      // ONLY for 1:1 chats - group chat is personality-only with no memory
-      if (is1to1Chat && isAutoChat && assistantContent && assistantContent.length > 50) {
-        // Extract dramatic content keywords that indicate important dialogue
-        const dramaticIndicators = [
-          'confess', 'reveal', 'secret', 'truth', 'lie', 'betray', 'love', 'hate',
-          'affair', 'money', 'dead', 'killed', 'pregnant', 'divorce', 'fired',
-          'cheat', 'steal', 'know about', 'told me', 'found out', 'discovered'
-        ];
-
-        const hasDramaticContent = dramaticIndicators.some(indicator =>
-          assistantContent.toLowerCase().includes(indicator)
-        );
-
-        if (hasDramaticContent) {
-          // Create a memory fact for this conversation
-          const conversationTitle = currentConv?.title || 'Private conversation';
-          const otherNpcNames = otherNpcIds
-            .map(id => identity.npcs.find(n => n.id === id)?.name)
-            .filter(Boolean)
-            .join(', ');
-
-          // Store as NPC memory - truncate to key dramatic moment
-          const memoryContent = assistantContent.length > 200
-            ? assistantContent.slice(0, 200) + '...'
-            : assistantContent;
-
-          // Add to each NPC's offscreen memories (they were all present)
-          const updatedNpcs = identity.npcs.map(n => {
-            if (conversationNpcIds.includes(n.id)) {
-              const existingMemories = n.offScreenMemories || [];
-              // Format: "Day X - In [conversation] with [people]: [speaker] said: [content]"
-              const newMemory = `Day ${identity.currentDay} - In "${conversationTitle}" with ${otherNpcNames}: ${npc.name} said: "${memoryContent}"`;
-              return {
-                ...n,
-                offScreenMemories: [...existingMemories.slice(-10), newMemory], // Keep last 10
-              };
-            }
-            return n;
-          });
-
-          // Update identity with new memories
-          const updatedIdentity = { ...identity, npcs: updatedNpcs };
-          setIdentity(updatedIdentity);
-          saveToIndexedDB('identities', updatedIdentity);
-
-          console.log(`[Cross-Memory] Stored dramatic moment from ${npc.name} in ${conversationTitle}`);
-        }
-      }
 
       // AUTO-CHAT PAUSE: Pause if NPC directly addresses the player
       // This includes: 1) Explicit shouldAskPlayerQuestion flag, OR 2) Content-based detection
@@ -3655,11 +3548,10 @@ function buildGroupChatPrompt(
     isAutoChat?: boolean;
     autoChatMessageCount?: number;
     shouldAskPlayerQuestion?: boolean;
-    memories?: string[]; // Retrieved memories from past conversations
     inRoleplayMode?: boolean; // Whether user is in sexual/intimate roleplay mode
   }
 ): string {
-  const { isAutoChat: _isAutoChat = false, autoChatMessageCount: _autoChatMessageCount = 0, shouldAskPlayerQuestion = false, memories = [], inRoleplayMode = false } = options || {};
+  const { isAutoChat: _isAutoChat = false, autoChatMessageCount: _autoChatMessageCount = 0, shouldAskPlayerQuestion = false, inRoleplayMode = false } = options || {};
 
   // Get other NPCs in THIS SPECIFIC CONVERSATION
   const otherNpcs = conversationNpcIds
@@ -3703,19 +3595,8 @@ You are a REAL PERSON, not a plot device. You can:
   const speakingStyleSection = buildSpeakingStyleSection(npc, identity.name);
 
   // ═══════════════════════════════════════════════════════════════════
-  // SECTION 2: MEMORIES - What you remember from past conversations
-  // ═══════════════════════════════════════════════════════════════════
-  const memorySection = memories.length > 0 ? `
-═══════════════════════════════════════════════════════════════════
-📝 THINGS YOU REMEMBER ABOUT ${identity.name.toUpperCase()}
-═══════════════════════════════════════════════════════════════════
-${memories.map(m => `• ${m}`).join('\n')}
-
-Use these memories naturally - "Remember when you said..." or "Last time we talked..."
-Don't force them into every message.` : '';
-
-  // ═══════════════════════════════════════════════════════════════════
-  // SECTION 2.5: OFF-SCREEN MEMORIES - Things YOU said/did recently
+  // SECTION 2: OFF-SCREEN MEMORIES - Events from simulations
+  // These are populated by simulations and inform opening scenarios
   // ═══════════════════════════════════════════════════════════════════
   const offScreenSection = npc.offScreenMemories && npc.offScreenMemories.length > 0 ? `
 ═══════════════════════════════════════════════════════════════════
@@ -4077,7 +3958,6 @@ ${getNPCBehaviorGuidelines(identity.difficulty)}`;
   // ═══════════════════════════════════════════════════════════════════
   return `${personalitySection}
 ${speakingStyleSection}
-${memorySection}
 ${offScreenSection}
 ${relationshipSection}
 ${tensionSection}

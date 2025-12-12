@@ -55,8 +55,8 @@ export const NPC_MODEL_POOL = [
  * Filter model pool to only include models that are available.
  * Called with the result of useModels() hook.
  *
- * Handles both short names (qwen3-30b-a3b) and full paths
- * (fireworks/accounts/fireworks/models/qwen3-30b-a3b) from API.
+ * Portals API uses provider/model format (e.g., grok/grok-2-1212)
+ * We need to find our pool models in the API list and return the API format.
  */
 export function filterAvailableModels(availableModels: { id?: string; name?: string }[]): string[] {
   if (!availableModels || availableModels.length === 0) {
@@ -64,27 +64,35 @@ export function filterAvailableModels(availableModels: { id?: string; name?: str
     return [MODEL_CONFIG.npc];
   }
 
-  // Get all available model IDs (could be short names or full paths)
+  // Get all available model IDs
   const availableIds = availableModels.map(m => m.id || m.name || '').filter(Boolean);
 
-  // Match pool short names to API model IDs (which may be full paths)
-  // Returns the FULL API path for each matched model
+  // Log first 20 available models to see format
+  console.log('[Models] Sample API models:', availableIds.slice(0, 20));
+
+  // Match pool short names to API model IDs
   const filtered: string[] = [];
 
   for (const poolModel of NPC_MODEL_POOL) {
-    // Find matching API model - check if API ID ends with our short name
-    // or contains it (for different path formats)
+    const poolModelLower = poolModel.toLowerCase();
+
+    // Find matching API model
     const matchedApiModel = availableIds.find(apiId => {
       const apiIdLower = apiId.toLowerCase();
-      const poolModelLower = poolModel.toLowerCase();
-      // Match: ends with short name, or exact match, or contains /shortname
+      // Extract just the model name from API ID (last part after /)
+      const apiModelName = apiIdLower.split('/').pop() || apiIdLower;
+
+      // Match if: exact match, or model name matches our pool model
       return apiIdLower === poolModelLower ||
-             apiIdLower.endsWith('/' + poolModelLower) ||
-             apiIdLower.endsWith(poolModelLower);
+             apiModelName === poolModelLower ||
+             apiIdLower.endsWith('/' + poolModelLower);
     });
 
     if (matchedApiModel) {
-      filtered.push(matchedApiModel); // Use full API path
+      console.log(`[Models] Matched ${poolModel} -> ${matchedApiModel}`);
+      filtered.push(matchedApiModel);
+    } else {
+      console.log(`[Models] No match for ${poolModel}`);
     }
   }
 

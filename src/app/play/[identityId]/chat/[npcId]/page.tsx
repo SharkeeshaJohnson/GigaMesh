@@ -468,25 +468,6 @@ function buildNPCSystemPrompt(npc: NPC, identity: Identity): string {
   // Get content-appropriate guidelines based on difficulty
   const npcBehavior = getNPCBehaviorGuidelines(identity.difficulty);
 
-  // Check if NPC has unrevealed story seeds (individual stories for 1:1 chats)
-  const unrevealedSeeds = npc.storySeeds?.filter(s => !s.revealedToPlayer) || [];
-  const currentSeed = unrevealedSeeds[0]; // Get highest priority unrevealed seed
-
-  // Build story seed section if NPC has something to share
-  let storySeedSection = '';
-  if (currentSeed) {
-    storySeedSection = `
-
-=== YOUR PERSONAL STORY ===
-You have something on your mind you might share:
-"${currentSeed.fact}"
-
-IMPORTANT: Don't force this. If ${identity.name} seems uninterested, takes the conversation
-in a different direction, or clearly wants to talk about something else - just roll with it
-and be yourself. Only bring this up if it naturally fits the conversation.
-If they're flirting, being romantic, or going off-topic - match their energy instead.`;
-  }
-
   return `${PROHIBITED_CONTENT_PROMPT}
 
 ${npcBehavior}
@@ -495,7 +476,6 @@ You ARE ${npc.name}. You're ${npc.role} to ${identity.name} (a ${identity.scenar
 Your vibe: ${npc.personality}. Right now you're feeling: ${npc.currentEmotionalState}.
 Your deal with ${identity.name}: ${npc.relationshipStatus}.
 What you know: ${npcBackground}
-${storySeedSection}
 
 HOW TO RESPOND:
 - 1-2 SHORT sentences max. One action in *asterisks* describing what you physically do.

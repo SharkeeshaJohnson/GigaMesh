@@ -5,7 +5,7 @@
  * Simplified approach - scenarios are based on NPC's actual backstory and personality.
  */
 
-import { NPC, NPCStorySeed, Identity, SimulationEvent } from '../types';
+import { NPC, Identity, SimulationEvent } from '../types';
 
 /**
  * Generate an opening scenario for an NPC on Day 1
@@ -134,34 +134,6 @@ export function generateDay1Scenario(
 
   const scenarios = openings[relationshipType] || openings.acquaintance;
   return scenarios[Math.floor(Math.random() * scenarios.length)];
-}
-
-/**
- * Generate story seeds for an individual NPC
- * These are personal stories/secrets the NPC can reveal in 1:1 chats
- */
-export function generateNPCStorySeeds(
-  npc: NPC,
-  identity: Identity,
-  seedCount: number = 2
-): NPCStorySeed[] {
-  const seeds: NPCStorySeed[] = [];
-  const difficulty = identity.difficulty;
-  const bullets = npc.bullets || [];
-
-  // Use the second bullet (which contains their secret) as the primary seed
-  if (bullets.length >= 2) {
-    seeds.push({
-      id: crypto.randomUUID(),
-      fact: bullets[1], // Second bullet is their secret/hidden motivation
-      type: 'secret',
-      severity: difficulty === 'crazy' ? 'explosive' : difficulty === 'dramatic' ? 'major' : 'moderate',
-      revealedToPlayer: false,
-      narrativePriority: 1,
-    });
-  }
-
-  return seeds;
 }
 
 /**
