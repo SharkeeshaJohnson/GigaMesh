@@ -2403,6 +2403,25 @@ Don't interrupt with story drama. Focus on the moment.`;
                   <p className="win95-text" style={{ fontSize: '11px', color: 'var(--win95-text-dim)', marginBottom: '8px' }}>
                     Send a message, then tap an NPC to respond
                   </p>
+                  {/* Actions & Simulate explanation */}
+                  <div className="mt-2 pt-2" style={{ borderTop: '1px solid var(--win95-mid)' }}>
+                    <p className="win95-text" style={{ fontSize: '10px', fontWeight: 'bold', color: 'var(--win95-accent)', marginBottom: '4px' }}>
+                      Actions
+                    </p>
+                    <p className="win95-text text-left" style={{ fontSize: '10px', color: 'var(--win95-text-dim)', lineHeight: '1.4' }}>
+                      Queue decisions you want to make — like "ask for a raise" or "skip family dinner".
+                      These will affect what happens when you simulate time.
+                    </p>
+                  </div>
+                  <div className="mt-2 pt-2" style={{ borderTop: '1px solid var(--win95-mid)' }}>
+                    <p className="win95-text" style={{ fontSize: '10px', fontWeight: 'bold', color: 'var(--win95-accent)', marginBottom: '4px' }}>
+                      Simulate
+                    </p>
+                    <p className="win95-text text-left" style={{ fontSize: '10px', color: 'var(--win95-text-dim)', lineHeight: '1.4' }}>
+                      Jump forward in time (1 day or 1 week). The AI simulates what happens based on
+                      your conversations and queued actions — NPCs react, relationships shift, and consequences unfold.
+                    </p>
+                  </div>
                   {/* Auto-chat explanation for multi-NPC conversations */}
                   {currentConversation && currentConversation.npcIds.length >= 2 && (
                     <div className="mt-2 pt-2" style={{ borderTop: '1px solid var(--win95-mid)' }}>
