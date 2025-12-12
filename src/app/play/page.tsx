@@ -18,12 +18,24 @@ export default function PlayPage() {
   const [loading, setLoading] = useState(true);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<number | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  // Delay auth check to avoid redirect loop during OAuth processing
+  useEffect(() => {
+    if (ready && !authChecked) {
+      // Give Privy time to settle auth state after OAuth callback
+      const timer = setTimeout(() => {
+        setAuthChecked(true);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [ready, authChecked]);
 
   useEffect(() => {
-    if (ready && !authenticated) {
+    if (authChecked && !authenticated) {
       router.push('/');
     }
-  }, [ready, authenticated, router]);
+  }, [authChecked, authenticated, router]);
 
   const loadSlots = async () => {
     try {
@@ -91,7 +103,7 @@ export default function PlayPage() {
     }
   };
 
-  if (!ready || loading) {
+  if (!ready || loading || (!authenticated && !authChecked)) {
     return (
       <main className="min-h-screen flex items-center justify-center">
         <div className="win95-window p-8">

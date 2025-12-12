@@ -2799,12 +2799,12 @@ Background hook: ${persona.backstoryHints[Math.floor(Math.random() * persona.bac
 /**
  * Generate a prompt hint for NPC generation
  */
-export function getNPCPromptHint(archetype: NPCArchetype, tier: 'core' | 'secondary' | 'tertiary'): string {
+export function getNPCPromptHint(archetype: NPCArchetype): string {
   const role = archetype.relationshipTypes[Math.floor(Math.random() * archetype.relationshipTypes.length)];
   const secret = archetype.secretHints[Math.floor(Math.random() * archetype.secretHints.length)];
 
   return `
-NPC TYPE: ${archetype.type} (${tier})
+NPC TYPE: ${archetype.type}
 Role: ${role}
 Traits: ${archetype.traits.join(', ')}
 Secret: ${secret}

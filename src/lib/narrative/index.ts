@@ -76,6 +76,18 @@ export {
 } from './story-seeds';
 
 // =============================================================================
+// SCENARIO GENERATOR (NEW: Per-NPC story system)
+// =============================================================================
+
+export {
+  generateDay1Scenario,
+  generateNPCStorySeeds,
+  generateEventBasedScenario,
+  generateRandomScenario,
+  severityScore,
+} from './scenario-generator';
+
+// =============================================================================
 // STATE MANAGEMENT
 // =============================================================================
 

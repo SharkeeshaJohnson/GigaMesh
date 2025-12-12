@@ -1,33 +1,26 @@
-import { NPCTier } from './types';
-
 export const MODEL_CONFIG = {
   // === 30B+ Models Only for NPCs (smaller models produce repetitive output) ===
+  // Using short names that match Portals API
 
-  // Core NPCs (spouse, boss) - using Qwen 30B (Llama causes 500 errors)
-  coreNPC: 'fireworks/accounts/fireworks/models/qwen3-30b-a3b',
-
-  // Secondary NPCs (close family, key coworkers)
-  secondaryNPC: 'fireworks/accounts/fireworks/models/qwen3-30b-a3b',
-
-  // Tertiary NPCs (extended cast, emergent characters) - still needs quality
-  tertiaryNPC: 'fireworks/accounts/fireworks/models/qwen3-30b-a3b',
+  // Default NPC model - fallback if no assigned model
+  npc: 'qwen3-30b-a3b',
 
   // Scenario generation
-  scenarioGeneration: 'fireworks/accounts/fireworks/models/qwen3-30b-a3b',
+  scenarioGeneration: 'qwen3-30b-a3b',
 
   // Simulation events
-  simulation: 'fireworks/accounts/fireworks/models/qwen3-30b-a3b',
+  simulation: 'qwen3-30b-a3b',
 
   // === Standard Models (non-roleplay tasks can use smaller models) ===
 
   // Memory extraction (structured output, smaller model OK)
-  memoryExtraction: 'fireworks/accounts/fireworks/models/qwen3-30b-a3b',
+  memoryExtraction: 'qwen3-30b-a3b',
 
   // Embeddings - content-agnostic vector math
   embedding: 'openai/text-embedding-3-small',
 
   // Fallback fast model - for non-roleplay tasks only
-  fallbackFast: 'fireworks/accounts/fireworks/models/qwen3-30b-a3b',
+  fallbackFast: 'qwen3-30b-a3b',
 } as const;
 
 export type ModelConfigKey = keyof typeof MODEL_CONFIG;
@@ -42,57 +35,79 @@ export type ModelConfigKey = keyof typeof MODEL_CONFIG;
  *
  * BANNED MODELS (output garbage/code or repetitive):
  * - mixtral-8x22b-instruct (outputs C code)
- * - mixtral-8x7b-instruct (unreliable for roleplay)
- * - mistral-7b-instruct-v3 (too small, goes off-rails)
- * - qwen3-8b (too small, produces repetitive outputs, ignores instructions)
- * - llama-v3p1-8b-instruct (too small for complex roleplay)
+ * - qwen3-8b (too small, produces repetitive outputs)
+ * - Models with 'embed', 'rerank', 'vision', 'vl', 'image', 'audio', 'veo', 'flux' in name
  *
- * ONLY USE 30B+ MODELS for NPCs - smaller models produce repetitive/low-quality outputs
+ * Model IDs match the Portals API short names (not full Fireworks paths)
  */
 export const NPC_MODEL_POOL = [
-  // Diverse models for varied NPC personalities
-  // Testing multiple models - if one causes 500 errors, it will be filtered out by availability check
-  'fireworks/accounts/fireworks/models/qwen3-30b-a3b',            // NPC 0: Qwen 30B - dramatic, creative
-  'fireworks/accounts/fireworks/models/qwen2p5-72b-instruct',     // NPC 1: Qwen 2.5 72B - analytical, detailed
-  'fireworks/accounts/fireworks/models/llama-v3p1-70b-instruct',  // NPC 2: Llama 3.1 70B - grounded, stable
-  'fireworks/accounts/fireworks/models/deepseek-v3',              // NPC 3: DeepSeek V3 - reasoning focused
-  'fireworks/accounts/fireworks/models/qwen2-72b-instruct',       // NPC 4: Qwen 2 72B - different style
+  // Diverse models for varied NPC personalities - using API short names
+  // Focused on unfiltered/less restricted models for crazy mode
+  'qwen3-30b-a3b',                              // NPC 0: Qwen 30B - dramatic, creative, permissive
+  'deepseek-v3-0324',                           // NPC 1: DeepSeek V3 - reasoning focused, less filtered
+  'grok-2-1212',                                // NPC 2: Grok 2 - edgy, unfiltered
+  'dobby-mini-unhinged-plus-llama-3-1-8b',      // NPC 3: Dobby Unhinged - explicitly unfiltered
+  'deepseek-v3p1',                              // NPC 4: DeepSeek V3.1 - updated, permissive
   // Cycles back for NPC 5+
 ];
 
 /**
  * Filter model pool to only include models that are available.
  * Called with the result of useModels() hook.
+ *
+ * Handles both short names (qwen3-30b-a3b) and full paths
+ * (fireworks/accounts/fireworks/models/qwen3-30b-a3b) from API.
  */
 export function filterAvailableModels(availableModels: { id?: string; name?: string }[]): string[] {
   if (!availableModels || availableModels.length === 0) {
     // Fallback to Qwen if no models list available
-    return [MODEL_CONFIG.coreNPC, MODEL_CONFIG.secondaryNPC, MODEL_CONFIG.tertiaryNPC];
+    return [MODEL_CONFIG.npc];
   }
 
-  const availableIds = new Set(availableModels.map(m => m.id || m.name || '').filter(Boolean));
+  // Get all available model IDs (could be short names or full paths)
+  const availableIds = availableModels.map(m => m.id || m.name || '').filter(Boolean);
 
-  // Log all available models from API for debugging
-  console.log('[Models] All API models:', Array.from(availableIds).map(m => m.split('/').pop()));
+  // Match pool short names to API model IDs (which may be full paths)
+  // Returns the FULL API path for each matched model
+  const filtered: string[] = [];
 
-  // Filter our pool to only available models
-  const filtered = NPC_MODEL_POOL.filter(model => availableIds.has(model));
+  for (const poolModel of NPC_MODEL_POOL) {
+    // Find matching API model - check if API ID ends with our short name
+    // or contains it (for different path formats)
+    const matchedApiModel = availableIds.find(apiId => {
+      const apiIdLower = apiId.toLowerCase();
+      const poolModelLower = poolModel.toLowerCase();
+      // Match: ends with short name, or exact match, or contains /shortname
+      return apiIdLower === poolModelLower ||
+             apiIdLower.endsWith('/' + poolModelLower) ||
+             apiIdLower.endsWith(poolModelLower);
+    });
+
+    if (matchedApiModel) {
+      filtered.push(matchedApiModel); // Use full API path
+    }
+  }
 
   // Log which of our preferred models are available
-  console.log('[Models] Our pool models available:', filtered.map(m => m.split('/').pop()));
+  console.log('[Models] Pool models matched:', filtered);
 
-  // If none of our preferred models are available, use whatever is available
+  // If none of our preferred models are available, pick diverse chat models from API
   if (filtered.length === 0) {
-    // Get first few available models (prefer larger ones)
+    console.log('[Models] No pool models found, selecting from API...');
+
+    // Skip non-chat models
+    const skipPatterns = ['embed', 'whisper', 'rerank', 'vision', 'vl-', '-vl', 'image', 'audio', 'veo', 'flux', 'imagen'];
+
     const chatModels = availableModels
       .filter(m => {
         const id = (m.id || m.name || '').toLowerCase();
-        // Skip embedding models and very small models
-        return !id.includes('embed') && !id.includes('whisper');
+        return !skipPatterns.some(pattern => id.includes(pattern));
       })
-      .slice(0, 5)
-      .map(m => m.id || m.name || '');
+      .map(m => m.id || m.name || '')
+      .filter(Boolean)
+      .slice(0, 10); // Get first 10 available chat models
 
+    console.log('[Models] Fallback chat models:', chatModels);
     return chatModels.length > 0 ? chatModels : [MODEL_CONFIG.fallbackFast];
   }
 
@@ -100,61 +115,59 @@ export function filterAvailableModels(availableModels: { id?: string; name?: str
 }
 
 /**
+ * Helper to check if a model ID matches (handles short name vs full path)
+ */
+function modelMatches(modelA: string, modelB: string): boolean {
+  const a = modelA.toLowerCase();
+  const b = modelB.toLowerCase();
+  return a === b || a.endsWith('/' + b) || b.endsWith('/' + a) || a.endsWith(b) || b.endsWith(a);
+}
+
+/**
  * Assign models to NPCs to ensure variety.
  * Each NPC gets a different model where possible.
  */
 export function assignModelsToNPCs(
-  npcs: { id: string; tier: NPCTier; assignedModel?: string }[],
+  npcs: { id: string; assignedModel?: string }[],
   availableModels: string[]
 ): Map<string, string> {
   const assignments = new Map<string, string>();
 
   if (availableModels.length === 0) {
-    // Fallback - use tier-based assignment
+    // Fallback - use default NPC model
     for (const npc of npcs) {
-      assignments.set(npc.id, getModelForNPCTier(npc.tier));
+      assignments.set(npc.id, MODEL_CONFIG.npc);
     }
     return assignments;
   }
 
-  // Shuffle models for random assignment
-  const shuffled = [...availableModels].sort(() => Math.random() - 0.5);
-
-  // Assign models round-robin to ensure maximum variety
+  // Don't shuffle - assign in order for deterministic variety
+  // NPC 0 gets model 0, NPC 1 gets model 1, etc.
   npcs.forEach((npc, index) => {
-    // If NPC already has an assigned model and it's available, keep it
-    if (npc.assignedModel && availableModels.includes(npc.assignedModel)) {
-      assignments.set(npc.id, npc.assignedModel);
+    // Check if NPC's saved model matches any available model
+    const existingMatch = npc.assignedModel
+      ? availableModels.find(m => modelMatches(m, npc.assignedModel!))
+      : null;
+
+    if (existingMatch) {
+      // Keep existing model (use the full API path)
+      assignments.set(npc.id, existingMatch);
     } else {
-      // Assign from shuffled pool, cycling through
-      const modelIndex = index % shuffled.length;
-      assignments.set(npc.id, shuffled[modelIndex]);
+      // Assign from pool in order, cycling through
+      const modelIndex = index % availableModels.length;
+      assignments.set(npc.id, availableModels[modelIndex]);
     }
   });
 
   return assignments;
 }
 
-// Helper to get model based on NPC tier (legacy fallback)
-export function getModelForNPCTier(tier: NPCTier): string {
-  switch (tier) {
-    case 'core':
-      return MODEL_CONFIG.coreNPC;
-    case 'secondary':
-      return MODEL_CONFIG.secondaryNPC;
-    case 'tertiary':
-      return MODEL_CONFIG.tertiaryNPC;
-    default:
-      return MODEL_CONFIG.tertiaryNPC;
-  }
-}
-
 /**
  * Get model for a specific NPC, using assigned model if available.
  */
-export function getModelForNPC(npc: { tier: NPCTier; assignedModel?: string }): string {
+export function getModelForNPC(npc: { assignedModel?: string }): string {
   if (npc.assignedModel) {
     return npc.assignedModel;
   }
-  return getModelForNPCTier(npc.tier);
+  return MODEL_CONFIG.npc;
 }

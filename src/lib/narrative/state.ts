@@ -165,13 +165,6 @@ function createInitialRelationships(identity: Identity): Relationship[] {
       metrics2to1.trust += variance();
       metrics2to1.affection += variance();
 
-      // Core NPCs might have stronger feelings
-      if (npc1.tier === 'core' && npc2.tier === 'core') {
-        // Core NPCs have more intense relationships
-        metrics1to2.rivalry += Math.random() * 30;
-        metrics2to1.rivalry += Math.random() * 30;
-      }
-
       relationships.push({
         fromId: npc1.id,
         toId: npc2.id,

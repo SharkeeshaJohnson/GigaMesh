@@ -10,7 +10,7 @@ import {
   getConversationsForNPC,
 } from '@/lib/indexeddb';
 import { useChat, useMemory } from '@/lib/reverbia';
-import { MODEL_CONFIG, getModelForNPCTier } from '@/lib/models';
+import { MODEL_CONFIG, getModelForNPC } from '@/lib/models';
 import {
   getNPCBehaviorGuidelines,
   PROHIBITED_CONTENT_PROMPT,
@@ -97,7 +97,41 @@ export default function ChatPage() {
           setConversationId(todayConv.id);
           setMessages(todayConv.messages);
         } else {
-          setConversationId(crypto.randomUUID());
+          // New conversation - create ID and potentially show opening scenario
+          const newConvId = crypto.randomUUID();
+          setConversationId(newConvId);
+
+          // If NPC has an opening scenario that hasn't been used, display it
+          if (foundNpc.openingScenario && !foundNpc.scenarioUsed) {
+            // Add the opening scenario as the first message
+            const scenarioMessage: Message = {
+              role: 'assistant',
+              content: foundNpc.openingScenario,
+              timestamp: new Date(),
+            };
+            setMessages([scenarioMessage]);
+
+            // Mark scenario as used and update identity
+            const updatedNpcs = loadedIdentity.npcs.map((n) =>
+              n.id === foundNpc.id ? { ...n, scenarioUsed: true } : n
+            );
+            const updatedIdentity = { ...loadedIdentity, npcs: updatedNpcs };
+            await saveToIndexedDB('identities', updatedIdentity);
+            setIdentity(updatedIdentity);
+
+            // Save initial conversation with scenario
+            const conversation: Conversation = {
+              id: newConvId,
+              npcId: foundNpc.id,
+              identityId: loadedIdentity.id,
+              day: loadedIdentity.currentDay,
+              messages: [scenarioMessage],
+              createdAt: new Date(),
+            };
+            await saveToIndexedDB('conversations', conversation);
+
+            console.log(`[1:1 Chat] Displayed opening scenario for ${foundNpc.name}`);
+          }
         }
       } catch (error) {
         console.error('Failed to load chat:', error);
@@ -163,8 +197,8 @@ export default function ChatPage() {
     // Build system prompt for NPC (now with narrative context)
     const systemPrompt = buildNPCSystemPrompt(npc, updatedIdentity);
 
-    // Get model based on NPC tier
-    const model = getModelForNPCTier(npc.tier);
+    // Get model for NPC (uses assigned model or default)
+    const model = getModelForNPC(npc);
 
     // Search for relevant memories
     let relevantMemories: string[] = [];
@@ -309,7 +343,6 @@ export default function ChatPage() {
 
         <div className="text-right">
           <div className="text-sm text-japandi-brown-400">Day {identity.currentDay}</div>
-          <div className="text-xs text-japandi-brown-300 capitalize">{npc.tier}</div>
         </div>
       </header>
 
@@ -425,7 +458,7 @@ function formatMessageContent(content: string): React.ReactNode {
   });
 }
 
-// Helper function to build NPC system prompt - WITH CONTENT FILTERING
+// Helper function to build NPC system prompt - WITH CONTENT FILTERING AND STORY SEEDS
 function buildNPCSystemPrompt(npc: NPC, identity: Identity): string {
   // Get NPC background from bullets or backstory (shorter)
   const npcBackground = npc.bullets?.length > 0
@@ -435,6 +468,25 @@ function buildNPCSystemPrompt(npc: NPC, identity: Identity): string {
   // Get content-appropriate guidelines based on difficulty
   const npcBehavior = getNPCBehaviorGuidelines(identity.difficulty);
 
+  // Check if NPC has unrevealed story seeds (individual stories for 1:1 chats)
+  const unrevealedSeeds = npc.storySeeds?.filter(s => !s.revealedToPlayer) || [];
+  const currentSeed = unrevealedSeeds[0]; // Get highest priority unrevealed seed
+
+  // Build story seed section if NPC has something to share
+  let storySeedSection = '';
+  if (currentSeed) {
+    storySeedSection = `
+
+=== YOUR PERSONAL STORY ===
+You have something on your mind you might share:
+"${currentSeed.fact}"
+
+IMPORTANT: Don't force this. If ${identity.name} seems uninterested, takes the conversation
+in a different direction, or clearly wants to talk about something else - just roll with it
+and be yourself. Only bring this up if it naturally fits the conversation.
+If they're flirting, being romantic, or going off-topic - match their energy instead.`;
+  }
+
   return `${PROHIBITED_CONTENT_PROMPT}
 
 ${npcBehavior}
@@ -443,6 +495,7 @@ You ARE ${npc.name}. You're ${npc.role} to ${identity.name} (a ${identity.scenar
 Your vibe: ${npc.personality}. Right now you're feeling: ${npc.currentEmotionalState}.
 Your deal with ${identity.name}: ${npc.relationshipStatus}.
 What you know: ${npcBackground}
+${storySeedSection}
 
 HOW TO RESPOND:
 - 1-2 SHORT sentences max. One action in *asterisks* describing what you physically do.
@@ -450,6 +503,7 @@ HOW TO RESPOND:
 - NO flowery language. NO "I appreciate" or "I understand". NO therapy-speak.
 - Be specific to YOUR character. React based on YOUR history with ${identity.name}.
 - If ${npc.currentEmotionalState} is negative, show it. Be petty, bitter, cold, whatever fits.
+- ADAPT to what ${identity.name} wants. If they go off-topic, follow their lead.
 
 BAD (AI-sounding): "I must say, I find myself quite intrigued by your proposal."
 GOOD (human): "Wait, you're serious?" *raises eyebrow* "Didn't think you had it in you."

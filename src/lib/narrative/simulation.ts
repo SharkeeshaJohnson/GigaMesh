@@ -304,13 +304,8 @@ function generateNPCAgendas(
       goals.push('Maintain relationships');
     }
 
-    // Current focus based on tier
-    let currentFocus = 'Daily activities';
-    if (npc.tier === 'core') {
-      currentFocus = myArcs.length > 0 ? `Focused on ${myArcs[0].title}` : 'Managing important matters';
-    } else if (npc.tier === 'secondary') {
-      currentFocus = 'Balancing work and personal life';
-    }
+    // Current focus based on their story arcs
+    let currentFocus = myArcs.length > 0 ? `Focused on ${myArcs[0].title}` : 'Daily activities';
 
     agendas.push({
       npcId: npc.id,

@@ -1,11 +1,22 @@
-export type NPCTier = 'core' | 'secondary' | 'tertiary';
 export type NPCOrigin = 'guaranteed' | 'emergent';
+
+/**
+ * NPC-specific story seed - individual stories for 1:1 chats
+ * Unlike the old cross-NPC system, each NPC has their own isolated seeds
+ */
+export interface NPCStorySeed {
+  id: string;
+  fact: string; // The story/secret this NPC can share
+  type: 'secret' | 'confession' | 'rumor' | 'past_event';
+  severity: 'minor' | 'moderate' | 'major' | 'explosive';
+  revealedToPlayer: boolean;
+  narrativePriority: number; // Lower = reveal sooner
+}
 
 export interface NPC {
   id: string;
   name: string;
   role: string; // e.g., "Wife", "Boss", "Coworker"
-  tier: NPCTier;
   origin: NPCOrigin; // How they entered the story
   spawnedDay: number; // Day they were introduced
   spawnTrigger?: string; // What caused them to appear (if emergent)
@@ -24,6 +35,11 @@ export interface NPC {
   pixelArtUrl: string; // generated sprite URL
   emotionSprites: Record<string, string>; // emotion -> sprite URL
   assignedModel?: string; // LLM model assigned to this NPC for varied responses
+
+  // === NEW: Individual NPC story system ===
+  openingScenario: string; // The scenario shown when user first opens 1:1 chat
+  storySeeds: NPCStorySeed[]; // Individual stories for this NPC (used in 1:1 chats only)
+  scenarioUsed: boolean; // Has the current opening scenario been shown?
 }
 
 /**
@@ -42,12 +58,8 @@ export function getEmotionalStateDisplay(state: string | string[]): string {
   return states.map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(', ');
 }
 
-// Starting NPC Distribution (10 guaranteed)
-export const GUARANTEED_NPC_DISTRIBUTION = {
-  core: 2,      // Uses gpt-4o
-  secondary: 4, // Uses gpt-4o-mini
-  tertiary: 4,  // Uses gpt-3.5-turbo
-};
+// Starting NPC count
+export const GUARANTEED_NPC_COUNT = 10;
 
 // Legacy emotion types - kept for backwards compatibility
 // For full emotional state system, see: src/lib/emotional-states.ts

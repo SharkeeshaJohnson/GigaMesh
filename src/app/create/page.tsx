@@ -31,7 +31,7 @@ import {
   parseJSONSafely,
   parseJSONArraySafely,
 } from '@/lib/llm-utils';
-import { generateStorySeeds, initializeNarrativeForNewGame } from '@/lib/narrative';
+import { initializeNarrativeForNewGame, generateDay1Scenario, generateNPCStorySeeds } from '@/lib/narrative';
 import { getNPCNameSuggestions, getPlayerNameSuggestions } from '@/lib/name-pools';
 import { getEmotionalStatesForRating, getRandomEmotionalStates, getEmotionCountForRating } from '@/lib/emotional-states';
 
@@ -283,7 +283,6 @@ function CreatePageContent() {
       const allNpcs = parseJSONArraySafely<{
         name: string;
         role: string;
-        tier: string;
         personality: string;
         emotion?: string;
         currentEmotionalState?: string;
@@ -338,7 +337,6 @@ function CreatePageContent() {
           id: crypto.randomUUID(),
           name: npc.name || 'Unknown',
           role: npc.role || 'Acquaintance',
-          tier: npc.tier || 'tertiary',
           origin: 'guaranteed' as const,
           spawnedDay: 1,
           personality: npc.personality || 'Reserved',
@@ -353,6 +351,10 @@ function CreatePageContent() {
           isActive: true,
           pixelArtUrl: npcSpriteUrls[index] || '',
           emotionSprites: {},
+          // NEW: Individual NPC story system (populated below)
+          openingScenario: '',
+          storySeeds: [],
+          scenarioUsed: false,
         })),
         createdAt: new Date(),
         lastPlayedAt: new Date(),
@@ -360,8 +362,19 @@ function CreatePageContent() {
 
       const narrativeState = initializeNarrativeForNewGame(newIdentity);
       newIdentity.narrativeState = narrativeState;
-      const storySeeds = generateStorySeeds(newIdentity, 8);
-      newIdentity.storySeeds = storySeeds;
+
+      // Generate per-NPC opening scenarios and story seeds (NEW system)
+      // Each NPC gets their own individual stories for 1:1 chats
+      newIdentity.npcs = newIdentity.npcs.map(npc => {
+        const openingScenario = generateDay1Scenario(npc, newIdentity);
+        const npcStorySeeds = generateNPCStorySeeds(npc, newIdentity, 2);
+        return {
+          ...npc,
+          openingScenario,
+          storySeeds: npcStorySeeds,
+          scenarioUsed: false,
+        };
+      });
 
       await saveToIndexedDB('identities', newIdentity);
       setIdentity(newIdentity);
@@ -916,7 +929,7 @@ function CreatePageContent() {
                           {npc.name}
                         </p>
                         <p className="win95-text" style={{ fontSize: '14px' }}>
-                          {npc.tier === 'core' ? '★ Core Character' : '○ Secondary Character'}
+                          {npc.role}
                         </p>
                       </div>
                     </div>
@@ -1070,8 +1083,8 @@ function buildNPCsPrompt(
   const rating = DIFFICULTY_TO_RATING[difficulty];
   const archetypes = selectRandomNPCArchetypes(rating, count);
 
-  const archetypeHints = archetypes.map((arch, i) =>
-    getNPCPromptHint(arch, i < 2 ? 'core' : 'secondary')
+  const archetypeHints = archetypes.map((arch) =>
+    getNPCPromptHint(arch)
   ).join('\n');
 
   // Get diverse name suggestions to avoid repetitive Western names

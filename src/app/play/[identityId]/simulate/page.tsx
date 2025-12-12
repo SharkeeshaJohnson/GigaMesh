@@ -38,6 +38,9 @@ import {
   processSimulationResults,
   advanceDay,
   getNarrativeSummary,
+  generateEventBasedScenario,
+  generateRandomScenario,
+  severityScore,
 } from '@/lib/narrative';
 import { compositeImage } from '@/lib/image-compositing';
 
@@ -107,6 +110,49 @@ function SimulatePageContent() {
     }
   };
 
+  // Update NPC opening scenarios based on simulation events
+  // NPCs involved in events get scenarios referencing those events
+  // NPCs not involved get random new scenarios
+  const updateNPCOpeningScenarios = (
+    currentIdentity: Identity,
+    simulationResult: SimulationResult
+  ): Identity => {
+    const updatedNpcs = currentIdentity.npcs.map((npc) => {
+      if (npc.isDead) return npc; // Skip dead NPCs
+
+      // Find events involving this NPC by checking if their name appears
+      const npcFirstName = npc.name.split(' ')[0].toLowerCase();
+      const relevantEvents = simulationResult.events.filter((event) => {
+        const eventText = `${event.title} ${event.description}`.toLowerCase();
+        return eventText.includes(npcFirstName) ||
+               event.involvedNpcs.some(name => name.toLowerCase().includes(npcFirstName));
+      });
+
+      let newScenario: string;
+
+      if (relevantEvents.length > 0) {
+        // Generate scenario based on most severe event involving this NPC
+        const primaryEvent = relevantEvents.sort(
+          (a, b) => severityScore(b.severity) - severityScore(a.severity)
+        )[0];
+        newScenario = generateEventBasedScenario(npc, primaryEvent, currentIdentity);
+        console.log(`[Simulation] ${npc.name} gets event-based scenario from: ${primaryEvent.title}`);
+      } else {
+        // Generate random new scenario
+        newScenario = generateRandomScenario(npc, currentIdentity);
+        console.log(`[Simulation] ${npc.name} gets random scenario (no events involved them)`);
+      }
+
+      return {
+        ...npc,
+        openingScenario: newScenario,
+        scenarioUsed: false, // Mark as new, ready to display in 1:1 chat
+      };
+    });
+
+    return { ...currentIdentity, npcs: updatedNpcs };
+  };
+
   useEffect(() => {
     if (ready && !authenticated) {
       router.push('/');
@@ -135,7 +181,13 @@ function SimulatePageContent() {
         setResult(simulationResult);
 
         // Apply simulation results to identity
-        const updatedIdentity = applySimulationResults(loadedIdentity, simulationResult);
+        let updatedIdentity = applySimulationResults(loadedIdentity, simulationResult);
+
+        // Update NPC opening scenarios based on simulation events
+        // This gives each NPC a fresh scenario for their 1:1 chat referencing what happened
+        updatedIdentity = updateNPCOpeningScenarios(updatedIdentity, simulationResult);
+        console.log('[Simulation] Updated NPC opening scenarios for all NPCs');
+
         await saveToIndexedDB('identities', updatedIdentity);
         setIdentity(updatedIdentity);
 
@@ -1370,7 +1422,7 @@ function buildSimulationPrompt(
     const npcBackground = n.bullets?.length > 0
       ? n.bullets.map(b => `  • ${b}`).join('\n')
       : `  • ${n.backstory}`;
-    return `- ${n.name} (${n.role}) [${n.tier}]
+    return `- ${n.name} (${n.role})
   Personality: ${n.personality}
   Current mood: ${n.currentEmotionalState}
   Relationship: ${n.relationshipStatus}

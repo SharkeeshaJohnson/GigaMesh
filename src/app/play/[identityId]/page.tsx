@@ -11,9 +11,6 @@ import { getModelForNPC, filterAvailableModels } from '@/lib/models';
 import { parseImageTags, inferImageType, generateCharacterConsistentImage } from '@/lib/image-generation';
 import { cacheChatImage, getCachedChatImage, getBreathingAnimationFrames } from '@/lib/sprite-cache';
 import {
-  generateStorySeeds,
-  markSeedRevealed,
-  StorySeed,
   getActiveStorySummary,
   getRelevantFactsForNPC,
 } from '@/lib/narrative';
@@ -201,7 +198,7 @@ export default function GamePage() {
   const [showHistory, setShowHistory] = useState(false);
 
   // Conversation management
-  const [allConversations, setAllConversations] = useState<{ id: string; title: string; npcIds: string[]; lastMessage?: string; updatedAt: Date; autoConverse?: boolean; autoChatMessageCount?: number }[]>([]);
+  const [allConversations, setAllConversations] = useState<{ id: string; title: string; npcIds: string[]; lastMessage?: string; updatedAt: Date; autoConverse?: boolean; autoChatMessageCount?: number; isIndividualNpc?: boolean }[]>([]);
   const [showAutoChatNotification, setShowAutoChatNotification] = useState(false);
   const [showAutoChatComplete, setShowAutoChatComplete] = useState(false);
   const [autoChatPausedForPlayer, setAutoChatPausedForPlayer] = useState(false); // Pause for player question
@@ -446,12 +443,24 @@ export default function GamePage() {
             }
           });
 
-          // Migration: Generate story seeds for existing saves that don't have them
-          if (!loadedIdentity.storySeeds || loadedIdentity.storySeeds.length === 0) {
-            const newSeeds = generateStorySeeds(loadedIdentity, 8);
-            loadedIdentity.storySeeds = newSeeds;
+          // Migration: Generate NPC-specific story seeds and opening scenarios for existing saves
+          const { generateDay1Scenario, generateNPCStorySeeds } = await import('@/lib/narrative');
+          let npcMigrationCount = 0;
+          loadedIdentity.npcs = loadedIdentity.npcs.map((npc: NPC) => {
+            let updated = { ...npc };
+            if (!npc.storySeeds || npc.storySeeds.length === 0) {
+              updated.storySeeds = generateNPCStorySeeds(npc, loadedIdentity, 2);
+              npcMigrationCount++;
+            }
+            if (!npc.openingScenario) {
+              updated.openingScenario = generateDay1Scenario(npc, loadedIdentity);
+              updated.scenarioUsed = false;
+            }
+            return updated;
+          });
+          if (npcMigrationCount > 0) {
             needsSave = true;
-            console.log(`[Migration] Generated ${newSeeds.length} story seeds for narrative engine`);
+            console.log(`[Migration] Generated story seeds for ${npcMigrationCount} NPCs`);
           }
 
           // Migration: Initialize narrativeState for existing saves that don't have it
@@ -501,7 +510,27 @@ export default function GamePage() {
               : undefined,
             updatedAt: new Date(),
           };
-          setAllConversations([defaultConv]);
+
+          // Create individual NPC conversation entries (1:1 chats)
+          const individualNpcConvs = await Promise.all(
+            loadedIdentity.npcs.filter((n: NPC) => !n.isDead).map(async (npc: NPC) => {
+              const npcConvId = `npc-${identityId}-${npc.id}`;
+              const npcConv = await getFromIndexedDB('conversations', npcConvId);
+              const npcMessages = npcConv?.messages as GroupMessage[] | undefined;
+              return {
+                id: npcConvId,
+                title: npc.name,
+                npcIds: [npc.id],
+                lastMessage: npcMessages && npcMessages.length > 0
+                  ? npcMessages[npcMessages.length - 1]?.content?.slice(0, 50)
+                  : npc.role,
+                updatedAt: new Date(),
+                isIndividualNpc: true, // Flag to identify 1:1 NPC chats
+              };
+            })
+          );
+
+          setAllConversations([defaultConv, ...individualNpcConvs]);
 
           // Load simulation history
           const simulations = await getSimulationsForIdentity(identityId);
@@ -525,32 +554,27 @@ export default function GamePage() {
   }, [authenticated, identityId, router]);
 
   // Assign diverse models to NPCs when models list becomes available
-  // ALWAYS reassign to ensure variety (don't preserve old assignments)
+  // ALWAYS reassign from our pool to ensure correct models are used
   useEffect(() => {
     async function assignNPCModels() {
       if (!identity || !models || models.length === 0) return;
 
       const availableModels = filterAvailableModels(models as any);
-      console.log('[Models] Available models:', availableModels.map(m => m.split('/').pop()));
+      console.log('[Models] Pool models available:', availableModels);
 
-      // If we only have 1-2 models, skip reassignment (no variety possible)
-      if (availableModels.length <= 2) {
-        console.log('[Models] Not enough model variety, using tier-based defaults');
+      // Must have at least 1 model
+      if (availableModels.length === 0) {
+        console.log('[Models] No pool models available, using default');
         return;
       }
 
-      // Create deterministic but diverse assignments based on NPC index
-      // This ensures variety while being stable across reloads
+      // ALWAYS reassign models from our pool - ignore existing assignments
+      // This ensures NPCs use our preferred unfiltered models
       const updatedNpcs = identity.npcs.map((npc: NPC, index: number) => {
         // Use modulo to cycle through available models
         const modelIndex = index % availableModels.length;
         const newModel = availableModels[modelIndex];
-
-        // Only update if different to avoid unnecessary saves
-        if (npc.assignedModel !== newModel) {
-          return { ...npc, assignedModel: newModel };
-        }
-        return npc;
+        return { ...npc, assignedModel: newModel };
       });
 
       // Check if any changes were made
@@ -560,11 +584,11 @@ export default function GamePage() {
         const updatedIdentity = { ...identity, npcs: updatedNpcs };
         setIdentity(updatedIdentity);
         await saveToIndexedDB('identities', updatedIdentity);
-        console.log(`[Models] Assigned diverse models to NPCs:`,
-          updatedNpcs.map((n: NPC) => `${n.name}: ${n.assignedModel?.split('/').pop()}`).join(', '));
+        console.log(`[Models] Reassigned models to NPCs:`,
+          updatedNpcs.map((n: NPC) => `${n.name}: ${n.assignedModel}`).join(', '));
       } else {
-        console.log(`[Models] NPCs already have diverse models:`,
-          identity.npcs.map((n: NPC) => `${n.name}: ${n.assignedModel?.split('/').pop()}`).join(', '));
+        console.log(`[Models] NPCs already using pool models:`,
+          identity.npcs.map((n: NPC) => `${n.name}: ${n.assignedModel}`).join(', '));
       }
     }
 
@@ -626,8 +650,8 @@ export default function GamePage() {
     const conversationNpcIds = currentConv?.npcIds || identity.npcs.map(n => n.id);
     const autoChatCount = currentConv?.autoChatMessageCount || 0;
 
-    // Check if we've hit the 2 message cap (reduced for faster progression)
-    if (autoChatCount >= 2) {
+    // Check if we've hit the 5 TOTAL message cap (across all NPCs, not per-NPC)
+    if (autoChatCount >= 5) {
       // Auto-stop auto-chat
       setAllConversations(prev => prev.map(c =>
         c.id === conversationId
@@ -790,37 +814,22 @@ export default function GamePage() {
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
 
-    // BUTTERFLY EFFECT: Store player action for NPCs to reference
-    // Only store if message is substantial (more than just a few words)
-    if (messageContent.length > 10) {
-      const currentConv = allConversations.find(c => c.id === conversationId);
-      const convTitle = currentConv?.title || 'conversation';
-      const npcNames = (currentConv?.npcIds || [])
-        .map(id => identity.npcs.find(n => n.id === id)?.name)
-        .filter(Boolean)
-        .join(', ');
-
-      const newAction = {
-        id: crypto.randomUUID(),
-        day: identity.currentDay,
-        content: messageContent.slice(0, 200), // Truncate long messages
-        context: `to ${npcNames || 'NPCs'} in ${convTitle}`,
-        timestamp: new Date(),
-      };
-
-      // Add to identity's playerActions (keep last 20)
-      const updatedActions = [...(identity.playerActions || []).slice(-19), newAction];
-      const updatedIdentity = { ...identity, playerActions: updatedActions };
-      setIdentity(updatedIdentity);
-      saveToIndexedDB('identities', updatedIdentity);
-
-      console.log(`[Butterfly Effect] Stored player action: "${messageContent.slice(0, 50)}..."`);
-    }
-
     // AUTO-CHAT RESUME: If auto-chat was paused waiting for player, resume it
     if (autoChatPausedForPlayer) {
       console.log('[Auto-Chat] Player responded, resuming auto-chat');
       setAutoChatPausedForPlayer(false);
+    }
+
+    // AUTO-RESPOND FOR 1:1 CHATS: If this is a single-NPC conversation, auto-trigger response
+    const currentConv = allConversations.find(c => c.id === conversationId);
+    if (currentConv?.npcIds.length === 1) {
+      const singleNpc = identity.npcs.find(n => n.id === currentConv.npcIds[0]);
+      if (singleNpc && !singleNpc.isDead) {
+        // Small delay to let the user message render first
+        setTimeout(() => {
+          handleNpcRespond(singleNpc, false, false);
+        }, 100);
+      }
     }
   };
 
@@ -858,102 +867,62 @@ export default function GamePage() {
       // Check if user is in roleplay/sexual mode
       const inRoleplayMode = isRoleplayMode(recentMessages);
 
-      // Get this NPC's unrevealed story seeds (sorted by priority)
-      const npcSeeds = (identity.storySeeds || [])
-        .filter((s: StorySeed) => s.knownBy.includes(npc.id) && !s.revealedToPlayer)
-        .sort((a: StorySeed, b: StorySeed) => a.narrativePriority - b.narrativePriority);
-      const currentSeed = npcSeeds[0] as StorySeed | undefined;
-
-      // Build seed-driven auto-chat directive
-      // Each NPC gets their SPECIFIC secret embedded in their phase instruction
+      // Build simple personality-based auto-chat directive
+      // NEW SYSTEM: No story seeds in group chat - just natural conversation
       let autoChatDirective = '';
       const otherNames = otherNpcIds.map(id => identity.npcs.find(n => n.id === id)?.name).filter(Boolean).join(', ');
 
-      if (isAutoChat && !inRoleplayMode && currentSeed) {
-        // NPC has a secret to reveal - 2 messages total
-        if (autoChatCount === 1) {
-          // Message 1: Let something slip
-          autoChatDirective = `
-[YOUR SECRET]
-"${currentSeed.fact}"
-
-[MESSAGE 1/2 - LET IT SLIP]
-Reference something SPECIFIC from your secret during conversation:
-- "Speaking of that... did you know [specific detail from secret]?"
-- "That reminds me - I heard that [part of secret]..."
-Use REAL DETAILS from the secret above. Don't be vague.
-Other people here: ${otherNames}`;
-        } else {
-          // Message 2: Full reveal
-          autoChatDirective = `
-[REVEAL THIS NOW]
-"${currentSeed.fact}"
-
-[MESSAGE 2/2 - SAY IT ALL]
-State the full secret clearly:
-- Use actual names
-- Give ALL the details
-- Say how you found out
-- Express how you FEEL (angry? worried? amused?)
-Be direct. This is your moment.`;
-        }
-      } else if (isAutoChat && !inRoleplayMode && !currentSeed) {
-        // NPC has no secrets - be a normal person, not a dramatic reactor
-        const normalTopics = [
-          `complain about your day`,
-          `gossip about someone not in this chat`,
-          `share a random opinion`,
-          `make a joke or tease someone`,
-          `ask ${identity.name} about their plans`,
-          `bring up something from your past`,
-        ];
-        const randomTopic = normalTopics[Math.floor(Math.random() * normalTopics.length)];
-
-        autoChatDirective = `
-[MESSAGE ${autoChatCount} - JUST BE NORMAL]
-You don't have any secrets to reveal. Be a regular person:
-- ${randomTopic}
-- React genuinely to what others say (agree, disagree, laugh, eye-roll)
-- If others are being dramatic, you can be skeptical or change the subject
-- Ask real questions, make real comments
-- DON'T act mysterious - you have nothing to be mysterious about
-Other people here: ${otherNames}`;
-      } else if (isAutoChat && inRoleplayMode) {
+      if (isAutoChat && inRoleplayMode) {
         // In roleplay mode - let it flow naturally
         autoChatDirective = `
 [ROLEPLAY MODE - Continue naturally]
 The user is engaged in intimate/sexual roleplay. Go with the flow.
-Don't interrupt with story drama. Focus on the moment.`;
+Focus on the moment.`;
+      } else if (isAutoChat) {
+        // Normal group conversation - just be yourself, no agenda
+        autoChatDirective = `
+[GROUP CHAT - BE YOURSELF]
+Just respond naturally based on your personality and mood.
+- React to what others are saying (agree, disagree, joke, tease)
+- Be yourself - ${npc.personality}
+- You can gossip, complain, share opinions, ask questions
+- Respond to other NPCs when appropriate
+Other people here: ${otherNames}
+NO HIDDEN AGENDAS. NO SECRETS TO REVEAL. JUST VIBES.`;
       }
 
       // Get model for this NPC (uses assigned model for variety, falls back to tier-based)
       const model = getModelForNPC(npc);
-      console.log(`[NPC Model] ${npc.name} using: ${model.split('/').pop()}`);
+      console.log(`[NPC Model] ${npc.name} using: ${model} (full path)`);
 
       // MEMORY SYSTEM: Search for relevant memories from past conversations
-      // This gives NPCs continuity - they remember what they've talked about with the player
+      // ONLY for 1:1 chats - group chat is personality-only with no memory
       let relevantMemories: string[] = [];
-      try {
-        // Get the last message to use as search query
-        const lastUserMsg = recentMessages.filter(m => m.role === 'user').pop();
-        const searchQuery = lastUserMsg?.content || `conversation with ${identity.name}`;
+      const is1to1Chat = conversationNpcIds.length === 1;
 
-        // Search for memories related to this NPC and player
-        // SDK signature: searchMemories(query: string, limit?: number, minSimilarity?: number)
-        const queryString = `${npc.name} ${identity.name} ${searchQuery}`;
-        console.log(`[Memory Search] Searching for: "${queryString.substring(0, 50)}..."`);
-        const memoryResults = await searchMemories(queryString, 5, 0.5);
+      if (is1to1Chat) {
+        try {
+          // Get the last message to use as search query
+          const lastUserMsg = recentMessages.filter(m => m.role === 'user').pop();
+          const searchQuery = lastUserMsg?.content || `conversation with ${identity.name}`;
 
-        if (memoryResults && Array.isArray(memoryResults) && memoryResults.length > 0) {
-          relevantMemories = memoryResults
-            .map((m: any) => m.content || m.text || m.memory)
-            .filter(Boolean)
-            .slice(0, 3); // Max 3 memories to keep prompt short
-          console.log(`[Memory] Found ${relevantMemories.length} memories for ${npc.name}`);
+          // Search for memories related to this NPC and player
+          // SDK signature: searchMemories(query: string, limit?: number, minSimilarity?: number)
+          const queryString = `${npc.name} ${identity.name} ${searchQuery}`;
+          console.log(`[Memory Search] Searching for: "${queryString.substring(0, 50)}..."`);
+          const memoryResults = await searchMemories(queryString, 5, 0.5);
+
+          if (memoryResults && Array.isArray(memoryResults) && memoryResults.length > 0) {
+            relevantMemories = memoryResults
+              .map((m: any) => m.content || m.text || m.memory)
+              .filter(Boolean)
+              .slice(0, 3); // Max 3 memories to keep prompt short
+            console.log(`[Memory] Found ${relevantMemories.length} memories for ${npc.name}`);
+          }
+        } catch (err) {
+          // Memory search is optional - don't fail the whole request
+          console.log(`[Memory] Search unavailable for ${npc.name}:`, err);
         }
-      } catch (err) {
-        // Memory search is optional - don't fail the whole request
-        console.log(`[Memory] Search unavailable for ${npc.name}:`, err);
       }
 
       // Build system prompt with all options including memories
@@ -1055,33 +1024,36 @@ Don't interrupt with story drama. Focus on the moment.`;
           continue;
         }
 
-        // Check for similarity to recent messages (from React state)
-        const similarityCheck = checkResponseSimilarity(assistantContent, recentMessages);
-        if (similarityCheck.isSimilar) {
-          console.log(`[NPC Response] Attempt ${attempt + 1} too similar to ${similarityCheck.similarTo}, retrying...`);
-          lastSimilarTo = similarityCheck.similarTo || 'someone';
-          await new Promise(resolve => setTimeout(resolve, 300));
-          continue;
-        }
+        // Check for similarity to recent messages - ONLY for 1:1 chats
+        // Group chat is free-flowing, no similarity checking needed
+        if (is1to1Chat) {
+          const similarityCheck = checkResponseSimilarity(assistantContent, recentMessages);
+          if (similarityCheck.isSimilar) {
+            console.log(`[NPC Response] Attempt ${attempt + 1} too similar to ${similarityCheck.similarTo}, retrying...`);
+            lastSimilarTo = similarityCheck.similarTo || 'someone';
+            await new Promise(resolve => setTimeout(resolve, 300));
+            continue;
+          }
 
-        // ALSO check against synchronous ref (catches responses not yet in React state)
-        // This fixes the race condition where multiple NPCs generate before state updates
-        const now = Date.now();
-        const recentFromRef = recentResponsesRef.current.filter(r => now - r.timestamp < 60000); // Last 60s
-        recentResponsesRef.current = recentFromRef; // Clean up old entries
+          // ALSO check against synchronous ref (catches responses not yet in React state)
+          // This fixes the race condition where multiple NPCs generate before state updates
+          const now = Date.now();
+          const recentFromRef = recentResponsesRef.current.filter(r => now - r.timestamp < 60000); // Last 60s
+          recentResponsesRef.current = recentFromRef; // Clean up old entries
 
-        const refMessages: GroupMessage[] = recentFromRef.map(r => ({
-          role: 'assistant' as const,
-          content: r.content,
-          timestamp: new Date(r.timestamp),
-          npcName: r.npcName,
-        }));
-        const refSimilarityCheck = checkResponseSimilarity(assistantContent, refMessages);
-        if (refSimilarityCheck.isSimilar) {
-          console.log(`[NPC Response] Attempt ${attempt + 1} too similar to recent response from ${refSimilarityCheck.similarTo}, retrying...`);
-          lastSimilarTo = refSimilarityCheck.similarTo || 'someone';
-          await new Promise(resolve => setTimeout(resolve, 300));
-          continue;
+          const refMessages: GroupMessage[] = recentFromRef.map(r => ({
+            role: 'assistant' as const,
+            content: r.content,
+            timestamp: new Date(r.timestamp),
+            npcName: r.npcName,
+          }));
+          const refSimilarityCheck = checkResponseSimilarity(assistantContent, refMessages);
+          if (refSimilarityCheck.isSimilar) {
+            console.log(`[NPC Response] Attempt ${attempt + 1} too similar to recent response from ${refSimilarityCheck.similarTo}, retrying...`);
+            lastSimilarTo = refSimilarityCheck.similarTo || 'someone';
+            await new Promise(resolve => setTimeout(resolve, 300));
+            continue;
+          }
         }
 
         // Good response, break
@@ -1162,8 +1134,8 @@ Don't interrupt with story drama. Focus on the moment.`;
       setMessages((prev) => [...prev, npcMessage]);
 
       // MEMORY SYSTEM: Extract memories from the conversation
-      // This allows NPCs to remember past conversations with the player
-      if (extractMemoriesFromMessage && assistantContent && assistantContent.length > 20) {
+      // ONLY for 1:1 chats - group chat is personality-only with no memory
+      if (is1to1Chat && extractMemoriesFromMessage && assistantContent && assistantContent.length > 20) {
         try {
           // Get the last user message to pair with the NPC response
           const lastUserMsg = recentMessages.filter(m => m.role === 'user').pop();
@@ -1186,22 +1158,9 @@ Don't interrupt with story drama. Focus on the moment.`;
         }
       }
 
-      // NARRATIVE ENGINE: Mark seeds as revealed when in revelation phase
-      // Simple approach: if NPC was in phase 7-9 (revelation) and had a seed, mark it revealed
-      // No word-matching needed - if we told them to reveal, assume they did
-      if (isAutoChat && currentSeed && autoChatCount >= 7 && autoChatCount <= 9) {
-        console.log(`[Narrative] ${npc.name} revealed seed: "${currentSeed.fact}"`);
-
-        // Mark the seed as revealed
-        const updatedSeeds = markSeedRevealed(identity.storySeeds || [], currentSeed.id, 'player');
-        const updatedIdentity = { ...identity, storySeeds: updatedSeeds };
-        setIdentity(updatedIdentity);
-        saveToIndexedDB('identities', updatedIdentity);
-      }
-
       // CROSS-CONVERSATION MEMORY: Extract facts from auto-chat and store in NPC memory
-      // This allows NPCs to remember what happened in other conversations
-      if (isAutoChat && assistantContent && assistantContent.length > 50) {
+      // ONLY for 1:1 chats - group chat is personality-only with no memory
+      if (is1to1Chat && isAutoChat && assistantContent && assistantContent.length > 50) {
         // Extract dramatic content keywords that indicate important dialogue
         const dramaticIndicators = [
           'confess', 'reveal', 'secret', 'truth', 'lie', 'betray', 'love', 'hate',
@@ -1672,7 +1631,7 @@ Don't interrupt with story drama. Focus on the moment.`;
                       }}
                     >
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           if (isEditing) return;
                           // Clear any pending response state when switching conversations
                           setIsResponding(false);
@@ -1680,13 +1639,45 @@ Don't interrupt with story drama. Focus on the moment.`;
                           setConversationId(conv.id);
                           setShowConvMenu(null);
                           // Load this conversation's messages
-                          getFromIndexedDB('conversations', conv.id).then((loaded) => {
-                            if (loaded?.messages) {
-                              setMessages(loaded.messages as GroupMessage[]);
-                            } else {
-                              setMessages([]);
+                          const loaded = await getFromIndexedDB('conversations', conv.id);
+                          let loadedMessages: GroupMessage[] = loaded?.messages || [];
+
+                          // For 1:1 NPC chats, handle opening scenario
+                          if (conv.isIndividualNpc && conv.npcIds.length === 1 && identity) {
+                            const npc = identity.npcs.find(n => n.id === conv.npcIds[0]);
+                            if (npc && npc.openingScenario && !npc.scenarioUsed) {
+                              // Create opening scenario message
+                              const scenarioMessage: GroupMessage = {
+                                role: 'assistant',
+                                content: npc.openingScenario,
+                                timestamp: new Date(),
+                                npcId: npc.id,
+                                npcName: npc.name,
+                              };
+                              // Prepend scenario if not already in messages
+                              if (!loadedMessages.some(m => m.content === npc.openingScenario)) {
+                                loadedMessages = [scenarioMessage, ...loadedMessages];
+                              }
+                              // Mark scenario as used
+                              const updatedNpcs = identity.npcs.map(n =>
+                                n.id === npc.id ? { ...n, scenarioUsed: true } : n
+                              );
+                              const updatedIdentity = { ...identity, npcs: updatedNpcs };
+                              setIdentity(updatedIdentity);
+                              saveToIndexedDB('identities', updatedIdentity);
+                              // Save messages with scenario
+                              await saveToIndexedDB('conversations', {
+                                id: conv.id,
+                                identityId: identityId,
+                                npcId: npc.id,
+                                day: identity.currentDay,
+                                messages: loadedMessages,
+                                createdAt: new Date(),
+                              });
                             }
-                          });
+                          }
+
+                          setMessages(loadedMessages);
                         }}
                         className="w-full p-2 text-left hover:bg-[var(--win95-lightest)] transition-colors"
                       >
@@ -1694,10 +1685,11 @@ Don't interrupt with story drama. Focus on the moment.`;
                           {/* Show NPC sprites */}
                           {conv.npcIds.slice(0, 3).map((npcId) => {
                             const npc = identity?.npcs.find(n => n.id === npcId);
+                            const hasNewScenario = conv.isIndividualNpc && npc && !npc.scenarioUsed && npc.openingScenario;
                             return npc?.pixelArtUrl ? (
                               <div
                                 key={npcId}
-                                className="w-5 h-5 overflow-hidden"
+                                className="w-5 h-5 overflow-hidden relative"
                                 style={{ border: '1px solid var(--win95-border-dark)', background: 'var(--win95-light)' }}
                               >
                                 <img
@@ -1706,6 +1698,14 @@ Don't interrupt with story drama. Focus on the moment.`;
                                   className="w-full h-auto"
                                   style={{ imageRendering: 'pixelated', transform: 'scale(2.5) translateY(15%)' }}
                                 />
+                                {/* New scenario indicator for 1:1 chats */}
+                                {hasNewScenario && (
+                                  <div
+                                    className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full"
+                                    style={{ background: '#ff4444', border: '1px solid #cc0000' }}
+                                    title="New story available"
+                                  />
+                                )}
                               </div>
                             ) : null;
                           })}
@@ -1828,6 +1828,7 @@ Don't interrupt with story drama. Focus on the moment.`;
                 })
               )}
             </div>
+
           </div>
 
           {/* Main Chat Area */}
@@ -2665,51 +2666,8 @@ Don't interrupt with story drama. Focus on the moment.`;
               );
             })}
 
-            {/* Streaming message display - shows real-time content as NPC responds */}
-            {streamingNpc && streamingContent && (
-              <div className="flex justify-start">
-                <div
-                  className="w-7 h-7 mr-1 flex-shrink-0 overflow-hidden"
-                  style={{
-                    background: 'var(--win95-light)',
-                    border: '1px solid var(--win95-border-dark)',
-                  }}
-                >
-                  {(() => {
-                    const npc = identity?.npcs.find(n => n.id === streamingNpc.id);
-                    return npc?.pixelArtUrl ? (
-                      <img
-                        src={npc.pixelArtUrl}
-                        alt={streamingNpc.name}
-                        className="w-full h-auto"
-                        style={{ imageRendering: 'pixelated', transform: 'scale(2.5) translateY(15%)' }}
-                      />
-                    ) : (
-                      <div className="w-full h-full" style={{ background: 'var(--win95-mid)' }} />
-                    );
-                  })()}
-                </div>
-                <div
-                  className="max-w-[75%] px-2 py-1"
-                  style={{
-                    background: 'white',
-                    border: '1px solid',
-                    borderColor: 'var(--win95-border-light) var(--win95-border-darker) var(--win95-border-darker) var(--win95-border-light)',
-                  }}
-                >
-                  <div className="win95-text" style={{ fontSize: '10px', fontWeight: 'bold', color: 'var(--win95-accent)' }}>
-                    {streamingNpc.name}
-                  </div>
-                  <div className="whitespace-pre-wrap win95-text" style={{ fontSize: '12px', lineHeight: '1.3' }}>
-                    {formatMessageContent(stripModelArtifacts(streamingContent))}
-                    <span className="inline-block w-1 h-3 ml-0.5 animate-pulse" style={{ background: 'var(--win95-accent)' }} />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Typing indicator - shows when waiting for response but no streaming content yet */}
-            {isResponding && streamingNpc && !streamingContent && (
+            {/* Typing indicator - shows when NPC is responding */}
+            {isResponding && streamingNpc && (
               <div className="flex justify-start">
                 <div
                   className="w-7 h-7 mr-1 flex-shrink-0 overflow-hidden animate-pulse"
@@ -2778,15 +2736,19 @@ Don't interrupt with story drama. Focus on the moment.`;
             <div ref={messagesEndRef} />
           </div>
 
-          {/* NPC Selector Bar - Compact - Only shows NPCs in current conversation */}
+          {/* NPC Selector Bar - Compact - Only shows for multi-NPC conversations */}
+          {(() => {
+            const currentConv = allConversations.find(c => c.id === conversationId);
+            const conversationNpcIds = currentConv?.npcIds || identity.npcs.map(n => n.id);
+            // Hide for 1:1 chats - auto-respond handles the response
+            if (conversationNpcIds.length <= 1) return null;
+            return (
           <div className="p-1 flex-shrink-0" style={{ background: 'var(--win95-mid)', borderTop: '2px solid var(--win95-border-dark)' }}>
             <div className="flex items-center gap-1">
               {/* Scrollable NPC list - filtered by current conversation */}
               <div className="flex gap-1 overflow-x-auto flex-1 py-1">
                 {(() => {
                   // Get NPCs for current conversation
-                  const currentConv = allConversations.find(c => c.id === conversationId);
-                  const conversationNpcIds = currentConv?.npcIds || identity.npcs.map(n => n.id);
                   return identity.npcs.filter(npc => conversationNpcIds.includes(npc.id));
                 })().map((npc) => {
                   // Get relationship metrics for this NPC
@@ -2863,6 +2825,8 @@ Don't interrupt with story drama. Focus on the moment.`;
               </div>
             </div>
           </div>
+            );
+          })()}
 
           {/* Input - Compact Win95 style */}
           <div className="p-2 flex-shrink-0" style={{ background: 'var(--win95-light)', borderTop: '1px solid var(--win95-border-dark)' }}>
@@ -2948,6 +2912,9 @@ function PixelMeter({ label, value, iconClass }: { label: string; value: number;
 function fixTextSpacing(text: string): string {
   let fixed = text;
 
+  // Normalize newlines - replace with spaces (LLMs sometimes output weird line breaks)
+  fixed = fixed.replace(/\r?\n/g, ' ');
+
   // Fix missing space BEFORE asterisk actions (e.g., "word.*action*" → "word. *action*")
   fixed = fixed.replace(/([a-zA-Z.,!?])(\*[^*]+\*)/g, '$1 $2');
 
@@ -2970,7 +2937,7 @@ function fixTextSpacing(text: string): string {
   // But preserve ordinals like "1st", "2nd", "3rd", "12th" AND units like "50k", "100m", "5x"
   fixed = fixed.replace(/(\d)((?!st|nd|rd|th|k|m|b|x|s|px|em|rem|vh|vw|ms|kb|mb|gb)[a-zA-Z])/gi, '$1 $2');
 
-  // Fix double spaces that might have been introduced
+  // Fix double/multiple spaces that might have been introduced
   fixed = fixed.replace(/\s{2,}/g, ' ');
 
   return fixed;
@@ -3699,12 +3666,8 @@ function buildGroupChatPrompt(
     ? identity.npcs.filter(n => n.id !== npc.id && conversationNpcIds.includes(n.id))
     : identity.npcs.filter(n => n.id !== npc.id && !n.isDead && n.isActive);
 
-  // Get story seeds as PASSIVE KNOWLEDGE (not forced revelations)
-  const storySeeds = identity.storySeeds || [];
-  const npcKnownFacts = storySeeds
-    .filter(s => s.knownBy.includes(npc.id) && !s.revealedToPlayer)
-    .slice(0, 3) // Max 3 facts to keep it manageable
-    .map(s => `• ${s.fact}`);
+  // NOTE: Story seeds are now handled in 1:1 chats only
+  // Group chat is for natural conversation without hidden agendas
 
   // Build banned phrases for avoiding repetition
   const bannedPhrases = getBannedPhrases(recentMessages);
@@ -3934,7 +3897,7 @@ You may have heard about these. React naturally if they come up.`;
   // ═══════════════════════════════════════════════════════════════════
   const knowledgeSection = `
 ═══════════════════════════════════════════════════════════════════
-🧠 WHAT YOU KNOW (use naturally, don't force)
+🧠 WHAT YOU KNOW
 ═══════════════════════════════════════════════════════════════════
 
 ABOUT ${identity.name} (THE PLAYER):
@@ -3942,13 +3905,7 @@ ABOUT ${identity.name} (THE PLAYER):
 • ${identity.scenario.briefBackground?.[0] || 'They have a past'}
 • ${identity.scenario.currentStory?.[0] || 'Something is going on in their life'}
 ${identity.meters.wealth < 30 ? `• They seem to be struggling with money` : ''}
-${identity.meters.mentalHealth < 30 ? `• They seem stressed/troubled` : ''}
-
-${npcKnownFacts.length > 0 ? `SECRETS/GOSSIP YOU'VE HEARD:
-${npcKnownFacts.join('\n')}
-
-You CAN bring these up if the conversation naturally goes there.
-You DON'T have to mention them at all if the conversation is about something else.` : ''}`;
+${identity.meters.mentalHealth < 30 ? `• They seem stressed/troubled` : ''}`;
 
   // ═══════════════════════════════════════════════════════════════════
   // SECTION 4: WHO'S HERE - Conversation participants

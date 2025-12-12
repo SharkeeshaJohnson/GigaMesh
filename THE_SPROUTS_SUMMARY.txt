@@ -161,6 +161,8 @@ Each NPC includes:
 - 2 background bullets (who they are + their secret/hidden motivation)
 - Assigned pixel art sprite
 - AI model assignment (tier-based)
+- Opening scenario (personalized story hook for 1:1 chat)
+- Story seeds (individual secrets/confessions unique to that NPC)
 
 
 ================================================================================
@@ -197,7 +199,10 @@ NPC ATTRIBUTES
 - Bullets: 2 short descriptions (visible to player)
 - Current Emotional State: How they're feeling now (supports multiple)
 - Relationship Status: Their relationship with the player
-- Off-Screen Memories: Events player doesn't know about (stored but not yet used)
+- Opening Scenario: Personalized story hook displayed when starting 1:1 chat
+- Story Seeds: Individual secrets/confessions this NPC can reveal (2 per NPC)
+- Scenario Used: Tracks if opening scenario has been displayed
+- Off-Screen Memories: Events from simulation that NPC experienced
 - isDead: NPCs can die (killed, suicide, etc.)
 - Death day and cause are tracked if applicable
 
@@ -243,7 +248,7 @@ Each emotional state includes:
 
 
 ================================================================================
-                    SPEAKING STYLE SYSTEM (NEW)
+                    SPEAKING STYLE SYSTEM
 ================================================================================
 
 Each NPC has a dynamically generated speaking style based on:
@@ -271,135 +276,57 @@ Every emotional state maps to specific voice qualities:
 
 
 ================================================================================
-                         NARRATIVE ENGINE
+                         CHAT SYSTEM ARCHITECTURE
 ================================================================================
 
-OVERVIEW
---------
-The narrative engine consists of two parallel systems:
+OVERVIEW - TWO DISTINCT CHAT MODES
+----------------------------------
+The game features two separate chat experiences with different purposes:
 
-1. STORY SEEDS (Simple) - ACTIVE in Group Chat
-2. NARRATIVE STATE (Complex) - Used in 1:1 Chat and Simulation only
+1. GROUP CHAT (Main Hub) - Casual social interaction with all NPCs
+2. 1:1 CHAT (Individual) - Deep story-driven conversations with single NPCs
 
-STORY SEEDS SYSTEM (Primary)
-----------------------------
-The main group chat is driven by "story seeds" - concrete facts that exist in
-the game world that NPCs can reveal during conversations.
-
-Story Seed Structure:
-- fact: The specific information (e.g., "Sarah saw Michael stealing money")
-- knownBy: Which NPCs know this fact
-- type: secret, evidence, relationship, event, betrayal, crime, affair
-- severity: minor, moderate, major, explosive
-- revealedToPlayer: Has this been revealed yet?
-- narrativePriority: When this should come out (lower = earlier)
-
-KEY DESIGN: The WITNESS knows the secret (and can reveal it).
-The SUBJECT is who the secret is about (they wouldn't confess unprompted).
-
-SEED-DRIVEN AUTO-CHAT DIRECTIVE (Current Implementation)
---------------------------------------------------------
-When NPCs auto-chat (talk without player input), they follow phased instructions:
-
-PHASE 1-3 (Messages 1-3): TENSION
-- NPC knows the secret but shouldn't reveal it yet
-- Instructions: "DON'T reveal this yet. Just hint. Be mysterious."
-
-PHASE 4-6 (Messages 4-6): ESCALATION
-- Building toward revelation
-- Instructions: "Start dropping bigger hints. The truth wants out."
-
-PHASE 7-9 (Messages 7-9): REVELATION
-- Time to reveal the secret
-- Instructions: "REVEAL THIS NOW. Say it clearly. Use names. Be specific."
-
-PHASE 10 (Message 10): CONCLUSION
-- Wrap up conversation
-- Instructions: "The truth is out. React to what just happened."
-
-Each NPC gets THEIR SPECIFIC secret injected into these phase instructions,
-ensuring different NPCs reveal different information (preventing duplicates).
-
-SCENARIO-SPECIFIC TEMPLATES (23 Categories, 160+ Seeds)
--------------------------------------------------------
-Story seeds are tailored to the player's profession/persona:
-
-EXISTING CATEGORIES:
-- ESPIONAGE: Double agents, blown covers, leaked intelligence
-- UNDERWORLD: Rats, skimming, power plays, witness protection
-- CORPORATE: Fraud, insider trading, hostile takeovers, affairs
-- CREATIVE: Plagiarism, fake personas, career sabotage
-
-NEW PROFESSION-BASED CATEGORIES:
-- HEALTHCARE: Malpractice, drug diversion, patient secrets, billing fraud
-- EDUCATION: Academic fraud, misconduct, plagiarism, grade manipulation
-- LEGAL: Ethics violations, evidence tampering, bribery, cover-ups
-- RELIGIOUS: Hypocrisy, financial abuse, manipulation, hidden pasts
-- POLITICS: Corruption, scandals, conspiracies, foreign influence
-- TECH/STARTUP: Fraud, IP theft, toxic culture, privacy violations
-- MILITARY: War crimes, stolen valor, betrayal, brotherhood secrets
-- SERVICE INDUSTRY: Theft, harassment, safety violations, scams
-- SPORTS: Doping, abuse, match fixing, injury cover-ups
-- MENTAL HEALTH: Ethics violations, fraud, confidentiality breaches
-- TRADES: Safety cover-ups, theft, fake credentials, corruption
-- ACADEMIC: Research fraud, plagiarism, grant fraud, misconduct
-
-SETTING-BASED CATEGORIES:
-- SMALL TOWN: Local scandals, family secrets, dark history, rivalries
-- FAMILY DRAMA: Parentage secrets, affairs, hidden truths, trauma
-- INHERITANCE: Will manipulation, hidden assets, contested claims, dirty money
-
-UNIVERSAL SEEDS (work in any scenario):
-- RELATIONSHIP: Affairs, secret phones, exes, escape plans
-- HIDDEN LIVES: Prison time, aliases, past deaths, abandoned families
-- ADDICTION: Relapses, self-medication, gambling debt, hidden stashes
-- FINANCIAL: Bankruptcy, fake lifestyles, theft, Ponzi schemes
-
-NARRATIVE STATE (Complex - Partially Used)
-------------------------------------------
-A more complex system exists but is only used in specific contexts:
-
-Used in:
-- Character Creation: Initializes story arcs
-- Simulation Page: Uses directives for time skips, tracks tension
-- 1:1 NPC Chat: Gets story summary, NPC facts, relationships
-
-NOT used in:
-- Main Group Chat (page.tsx): Only uses story seeds
-
-Components (partially implemented):
-- Story Arcs: Multi-beat storylines with phases
-- World Facts: Knowledge that can propagate between NPCs
-- Relationships: Trust, fear, affection metrics
-- Timeline: Event tracking by day
-- Global Tension: 0-100 dramatic tension level
+This separation allows for:
+- Natural group dynamics without forced drama
+- Focused narrative progression in private conversations
+- Player choice in when to engage with story content
 
 
 ================================================================================
                            GROUP CHAT SYSTEM
 ================================================================================
 
-OVERVIEW
---------
-The main gameplay screen is a multi-NPC group chat where player converses with
-all active NPCs simultaneously.
+PURPOSE
+-------
+The group chat serves as the main social hub where the player interacts with
+all NPCs in a relaxed, natural setting. Think of it like a group text or
+Discord server where everyone hangs out.
 
-KEY FEATURES:
--------------
-1. Auto-Chat: NPCs talk to each other without player input
-2. Streaming Responses: Messages stream in real-time
-3. Duplicate Prevention: System detects similar responses and regenerates
-4. Memory Integration: Past conversations influence current behavior
-5. Roleplay Detection: System detects intimate/roleplay mode and adapts
+KEY DESIGN PRINCIPLES:
+----------------------
+1. NO HIDDEN AGENDAS - NPCs just respond naturally based on personality
+2. NO STORY SEEDS - Secrets and revelations happen in 1:1 chats only
+3. PERSONALITY-DRIVEN - NPCs are themselves, not pushing narratives
+4. SOCIAL VIBES - React to what others say, joke, tease, agree, disagree
 
-AUTO-CHAT FLOW:
----------------
-1. Player sends message (or auto-chat triggers)
-2. NPCs respond in random order with delays
-3. Each NPC checks for similar recent responses
-4. If too similar (>70%), regenerate with banned phrases
-5. After 10 auto-chat messages, system pauses for player input
-6. If player addressed by name with question, auto-chat pauses
+AUTO-CHAT SYSTEM:
+-----------------
+When enabled, NPCs talk to each other without player input:
+
+- Cap: 5 TOTAL messages (not per-NPC), then pauses for player input
+- Selection: Random NPC selection with weighted probability
+- Personality-Only: No story directives, just natural responses
+- Pause Triggers: If NPC directly addresses player by name with a question
+
+AUTO-CHAT DIRECTIVE (Simplified):
+---------------------------------
+```
+[GROUP CHAT - BE YOURSELF]
+Just respond naturally based on your personality and mood.
+- React to what others are saying (agree, disagree, joke, tease)
+- Be yourself - {npc.personality}
+NO HIDDEN AGENDAS. NO SECRETS TO REVEAL. JUST VIBES.
+```
 
 STREAMING WITH RETRY LOGIC:
 ---------------------------
@@ -418,29 +345,216 @@ PROMPT STRUCTURE (buildGroupChatPrompt):
 ----------------------------------------
 Section 1: PERSONALITY - Who you are, mood, background
 Section 1.5: SPEAKING STYLE - Voice, patterns, phrases
-Section 2: MEMORIES - Past conversation memories
-Section 3: PASSIVE KNOWLEDGE - What you know (story seeds as context)
-Section 4: WHO'S HERE - Conversation participants
-Section 5: NPC BANTER - How to interact with other NPCs
-Section 6: HOW TO RESPOND - Core response rules
+Section 2: MEMORIES - Past conversation memories + simulation events
+Section 3: WHO'S HERE - Conversation participants
+Section 4: NPC BANTER - How to interact with other NPCs
+Section 5: HOW TO RESPOND - Core response rules
 + Auto-Chat Directive (when applicable)
 
-
-================================================================================
-                        PLAYER ACTIONS & BUTTERFLY EFFECT
-================================================================================
-
-Player actions are tracked and can affect future conversations:
-- What the player said/did
-- Context (who they said it to, what conversation)
-- Day and timestamp
-
-NPCs can reference past player actions, creating cause-and-effect chains
-similar to the "viral spread" mechanic in Plague Inc.
+Note: Story seeds and cross-NPC knowledge REMOVED from group chat prompts.
 
 
 ================================================================================
-                          TECHNICAL ARCHITECTURE
+                         1:1 CHAT SYSTEM (NEW)
+================================================================================
+
+PURPOSE
+-------
+Individual NPC chats are where the real story happens. Each NPC has their own
+narrative arc with opening scenarios and story seeds that create dramatic,
+personalized conversations.
+
+ACCESSING 1:1 CHATS:
+--------------------
+- New "1:1 Chats" section in the sidebar below group conversations
+- Each NPC shows: avatar, name, role
+- Red notification dot indicates new/unused scenario available
+- Click navigates to dedicated 1:1 chat page
+
+OPENING SCENARIOS:
+------------------
+When starting a 1:1 chat, the NPC initiates with a contextual opening scenario.
+
+Day 1 Scenarios (Character Creation):
+- Generated based on NPC's role and relationship to player
+- Role-appropriate hooks (spouse talks about relationship, boss about work, etc.)
+- Difficulty-appropriate content
+
+Day 2+ Scenarios (Post-Simulation):
+- INVOLVED NPCs: Scenario references simulation events they experienced
+  - Example: "Sarah seems distracted... 'I saw something yesterday that I can't
+    stop thinking about. Were you really at the Miller house?'"
+- UNINVOLVED NPCs: Random new scenario appropriate to their role
+  - Example: "Your mother has something on her mind... 'I've been meaning to
+    talk to you about the family reunion next month.'"
+
+Scenario Display:
+- Shows as first message when entering chat (if not already used)
+- Styled distinctly from regular messages
+- Marked as "used" after display (scenarioUsed = true)
+- Won't show again until simulation generates new scenario
+
+STORY SEEDS (Per-NPC):
+----------------------
+Each NPC has 2 individual story seeds - secrets, confessions, or revelations
+that are UNIQUE to that NPC. No cross-NPC knowledge.
+
+Story Seed Structure:
+```typescript
+interface NPCStorySeed {
+  id: string;
+  fact: string;                    // The specific secret/confession
+  type: 'secret' | 'confession' | 'rumor' | 'past_event';
+  severity: 'minor' | 'moderate' | 'major' | 'explosive';
+  revealedToPlayer: boolean;       // Has this been revealed?
+  narrativePriority: number;       // Lower = reveal earlier
+}
+```
+
+Story Seed Integration in Prompts:
+```
+=== YOUR PERSONAL STORY ===
+You have something on your mind you might share:
+"{currentSeed.fact}"
+
+IMPORTANT: Don't force this. If {playerName} seems uninterested or takes the
+conversation elsewhere, follow their lead. Only share if it feels natural.
+
+Try ONCE to steer the conversation toward your story. If they go off-topic,
+adapt and engage with what THEY want to talk about instead.
+```
+
+Key Design Decisions:
+- NPCs try ONCE to bring up their story, then follow player's lead
+- No aggressive steering - if player wants to talk about something else, NPC adapts
+- Seeds are isolated per-NPC - no shared knowledge between NPCs
+- Revelations feel organic, not forced
+
+
+================================================================================
+                      SIMULATION & SCENARIO REGENERATION
+================================================================================
+
+SIMULATION OVERVIEW
+-------------------
+The simulation system handles "time skips" where events occur off-screen.
+After simulation, NPC scenarios are regenerated to reflect what happened.
+
+POST-SIMULATION SCENARIO UPDATE:
+--------------------------------
+```typescript
+const updateNPCOpeningScenarios = (identity, simulationResult) => {
+  return identity.npcs.map(npc => {
+    // Find events this NPC was involved in
+    const relevantEvents = simulationResult.events.filter(event =>
+      event description mentions NPC's name
+    );
+
+    if (relevantEvents.length > 0) {
+      // NPC was involved - create event-based scenario
+      const primaryEvent = relevantEvents.sort(bySeverity)[0];
+      return {
+        ...npc,
+        openingScenario: generateEventBasedScenario(npc, primaryEvent, identity),
+        scenarioUsed: false
+      };
+    } else {
+      // NPC wasn't involved - create random new scenario
+      return {
+        ...npc,
+        openingScenario: generateRandomScenario(npc, identity),
+        scenarioUsed: false
+      };
+    }
+  });
+};
+```
+
+This ensures:
+- NPCs reference events they witnessed/experienced
+- Simulation consequences carry into conversations
+- Every NPC has fresh content after time skips
+- Red notification dots appear for NPCs with new scenarios
+
+
+================================================================================
+                         SCENARIO GENERATOR MODULE
+================================================================================
+
+Located at: src/lib/narrative/scenario-generator.ts
+
+FUNCTIONS:
+----------
+
+1. generateDay1Scenario(npc, identity)
+   - Creates initial opening scenario at character creation
+   - Role-based templates (spouse, boss, family, friend, etc.)
+   - Considers relationship closeness and NPC personality
+   - Difficulty-appropriate content
+
+2. generateNPCStorySeeds(npc, identity, count)
+   - Extracts story seeds from NPC's backstory bullets
+   - Prioritizes hidden/secret bullet content
+   - Assigns severity based on content keywords
+   - Returns array of NPCStorySeed objects
+
+3. generateEventBasedScenario(npc, event, identity)
+   - Creates scenario referencing a simulation event
+   - NPC's perspective on what happened
+   - Emotional reaction based on event severity
+   - Natural conversation starter about the event
+
+4. generateRandomScenario(npc, identity)
+   - Creates fresh scenario for uninvolved NPCs
+   - Role-appropriate topics (work, family, hobbies, etc.)
+   - Adds variety between simulation cycles
+
+5. severityScore(event)
+   - Helper to sort events by importance
+   - Used to select primary event for scenario generation
+
+
+================================================================================
+                            UI/UX UPDATES
+================================================================================
+
+SIDEBAR STRUCTURE (Updated):
+----------------------------
+```
++---------------------------+
+| [+ New Conversation]      |
++---------------------------+
+| Group Conversations:      |
+| - All NPCs (default)      |
+| - Custom Group 1          |
+| - Custom Group 2          |
++---------------------------+
+| 1:1 Chats:                |  <-- NEW SECTION
+| [Avatar] Sarah (Wife)   > |
+| [Avatar] Mike (Boss)  * > |  <-- * = red dot (new scenario)
+| [Avatar] Mom (Mother)   > |
+| [Avatar] etc...           |
++---------------------------+
+```
+
+1:1 CHAT ENTRY FEATURES:
+------------------------
+- NPC avatar (small pixel sprite)
+- NPC name and role
+- Red notification dot if scenarioUsed === false
+- Arrow indicator (→) showing it's clickable
+- Click navigates to /play/[identityId]/chat/[npcId]
+
+NOTIFICATION DOT LOGIC:
+-----------------------
+```typescript
+const hasNewScenario = !npc.scenarioUsed && npc.openingScenario;
+// Shows red dot if NPC has an opening scenario that hasn't been viewed yet
+```
+
+
+================================================================================
+                         TECHNICAL ARCHITECTURE
 ================================================================================
 
 TECH STACK
@@ -474,11 +588,13 @@ LOCAL-FIRST ARCHITECTURE
 
 KEY FILES
 ---------
-- src/app/play/[identityId]/page.tsx - Main group chat (3900+ lines)
+- src/app/play/[identityId]/page.tsx - Main group chat hub
 - src/app/play/[identityId]/chat/[npcId]/page.tsx - 1:1 NPC chat
 - src/app/play/[identityId]/simulate/page.tsx - Time skip/simulation
 - src/app/create/page.tsx - Character creation
+- src/lib/narrative/scenario-generator.ts - Opening scenarios & story seeds
 - src/lib/narrative/ - Narrative engine modules
+- src/lib/types/npc.ts - NPC interface with story seed types
 - src/lib/content-filter.ts - Content filtering by difficulty
 - src/lib/emotional-states.ts - 100+ emotional state definitions
 
@@ -501,7 +617,8 @@ KEY SCREENS
 2. Play Page: Save slot management, continue/new game options
 3. Create Page: Multi-step character creation wizard
 4. Game Page: Chat interface with NPC portraits, meters display
-5. Simulate Page: Time skip with event results
+5. 1:1 Chat Page: Individual NPC conversation with opening scenario
+6. Simulate Page: Time skip with event results
 
 ANIMATIONS
 ----------
@@ -530,87 +647,116 @@ Full content filter system exists (src/lib/content-filter.ts) with:
 - getContentGuidelines(): Detailed guidelines per rating
 - getNPCBehaviorGuidelines(): NPC behavior rules per mode
 
-Currently used in:
-- Character creation (create/page.tsx)
-- Simulation (simulate/page.tsx)
-- 1:1 NPC chat (chat/[npcId]/page.tsx)
 
-Currently NOT fully used in:
-- Group chat (page.tsx) - Only inline difficulty check
+================================================================================
+                     DATA MODEL CHANGES (December 2025)
+================================================================================
+
+NPC INTERFACE ADDITIONS:
+------------------------
+```typescript
+interface NPC {
+  // ... existing fields ...
+
+  // NEW: Opening scenario for 1:1 chat
+  openingScenario: string;
+
+  // NEW: Individual story seeds (secrets/confessions)
+  storySeeds: NPCStorySeed[];
+
+  // NEW: Track if scenario has been displayed
+  scenarioUsed: boolean;
+}
+
+interface NPCStorySeed {
+  id: string;
+  fact: string;
+  type: 'secret' | 'confession' | 'rumor' | 'past_event';
+  severity: 'minor' | 'moderate' | 'major' | 'explosive';
+  revealedToPlayer: boolean;
+  narrativePriority: number;
+}
+```
+
+IDENTITY INTERFACE CHANGES:
+---------------------------
+```typescript
+interface Identity {
+  // ... existing fields ...
+
+  // DEPRECATED: Global story seeds (no longer used)
+  // @deprecated Use npc.storySeeds instead - each NPC now has individual seeds
+  storySeeds?: StorySeed[];
+}
+```
+
+MIGRATION HANDLING:
+-------------------
+Existing saves are automatically migrated:
+- NPCs without storySeeds get them generated from backstory
+- NPCs without openingScenario get role-appropriate scenarios
+- Old identity.storySeeds ignored (deprecated but not removed for compatibility)
 
 
 ================================================================================
                      REMOVED/DEPRECATED FEATURES
 ================================================================================
 
-REVELATION DIRECTIVE SYSTEM (Removed)
--------------------------------------
+REMOVED FROM GROUP CHAT:
+------------------------
+1. Story seed directives - NPCs no longer have hidden agendas in group chat
+2. Cross-NPC knowledge (npcKnownFacts) - No shared knowledge system
+3. Revelation phases - No phased revelation system in group chat
+4. Per-NPC auto-chat cap - Now 5 TOTAL messages instead of 2 per NPC
+
+DEPRECATED:
+-----------
+1. identity.storySeeds - Replaced by npc.storySeeds (per-NPC)
+2. generateStorySeeds() for identity - Replaced by generateNPCStorySeeds()
+3. Old revelation directive system - Simplified to personality-only
+
+REVELATION DIRECTIVE SYSTEM (Previously Removed)
+------------------------------------------------
 Previously had a complex system with:
 - RevelationDirective interface
 - selectRevelationForNPC() function
 - buildRevelationPrompt() function
 - detectAndMarkRevelation() function
-- generateNPCDynamics() function
-- generateConversationGoal() function
-- generateNPCConflicts() function
 
 These were REMOVED because:
 1. They were never actually called in the main game loop
-2. The auto-chat directive was doing all the work
-3. Simplified to seed-driven auto-chat phases
-
-~330 lines of code removed from story-seeds.ts
+2. The system was overly complex for the intended experience
+3. Simplified to per-NPC story seeds in 1:1 chats only
 
 
 ================================================================================
-                    AUDIT FINDINGS (Technical Debt)
+                    DESIGN PHILOSOPHY CHANGES
 ================================================================================
 
-UNUSED CODE IN GROUP CHAT (page.tsx):
--------------------------------------
-1. extractNPCKnowledge() - Defined line 3069, never called
-2. inferNPCRelationship() - Defined line 3160, never called
-3. _simulationHistory parameter - Passed but marked unused with underscore
-4. offScreenMemories - Written but never read in prompts
+BEFORE (Old System):
+--------------------
+- Group chat = main story delivery mechanism
+- NPCs had hidden agendas and revelation phases
+- Auto-chat was scripted to reveal secrets over 10 messages
+- Cross-NPC knowledge allowed shared secrets
+- Complex directive system controlled NPC behavior
 
-NARRATIVE ENGINE GAPS:
-----------------------
-The full narrative engine is NOT connected to the main group chat:
+AFTER (New System):
+-------------------
+- Group chat = casual social hangout (no forced drama)
+- 1:1 chats = where real story happens
+- Auto-chat is purely personality-driven
+- Each NPC has isolated, individual story seeds
+- NPCs adapt to player's conversational direction
+- Player chooses when to engage with story content
 
-| Feature              | Create | Simulate | 1:1 Chat | Group Chat |
-|----------------------|--------|----------|----------|------------|
-| Story Seeds          |   Y    |    N     |    N     |     Y      |
-| Narrative State      |   Y    |    Y     |    Y     |     N      |
-| Group Dynamics       |   N    |    N     |    N     |     N      |
-| Knowledge Graph      |   Y*   |    Y     |    Y     |     N      |
-| Action Tracker       |   N    |    N     |    N     |     N      |
-| Content Filter       |   Y    |    Y     |    Y     |  Partial   |
-
-ENTIRELY UNUSED MODULES:
-------------------------
-- group-dynamics.ts - Never imported outside narrative/index.ts
-- action-tracker.ts - classifyAction, recordPlayerAction never used
-- Much of knowledge-graph.ts - propagateKnowledge, confirmSuspicion, etc.
-
-DUPLICATE SYSTEMS:
-------------------
-1. TWO story systems: storySeeds (simple) vs narrativeState.activeArcs (complex)
-2. TWO content approaches: Full filter vs inline difficulty check
-3. THREE knowledge systems: NPC bullets, narrativeState.npcKnowledge, storySeeds.knownBy
-
-
-================================================================================
-                            FUTURE FEATURES
-================================================================================
-
-Based on the codebase structure, planned/potential features include:
-- Full narrative engine integration with group chat
-- Off-screen memory utilization in prompts
-- Content filter consistency across all chat modes
-- Action tracking with butterfly effect consequences
-- More emergent NPC spawning
-- Extended relationship dynamics
-- Achievement/milestone system
+WHY THE CHANGE:
+---------------
+Inspired by Character.AI's approach where:
+- Group interactions feel natural and unforced
+- Individual conversations allow for depth
+- Players have agency over story engagement
+- NPCs feel like real people, not plot devices
 
 
 ================================================================================
@@ -622,21 +768,24 @@ The Sprouts is an innovative AI-powered life simulation that combines:
 - Flexible content ratings for different player preferences
 - Local-first architecture for privacy
 - Charming retro pixel art aesthetics
-- Complex NPC relationships driven by hidden story seeds
-- Meaningful player choice with butterfly effect consequences
+- Complex NPC relationships with individual story arcs
+- Meaningful player choice in story engagement
 
-CURRENT STATE:
-- Group chat is the primary gameplay loop
-- Story seeds drive revelations via phased auto-chat directives
+CURRENT STATE (December 2025):
+------------------------------
+- Group chat is a casual social hub (personality-driven, no agendas)
+- 1:1 chats deliver personalized story content via opening scenarios
+- Each NPC has individual story seeds (2 per NPC, isolated)
+- Simulation events inform post-day opening scenarios
 - Speaking style system creates unique NPC voices
 - Duplicate detection prevents repetitive responses
-- Full narrative engine exists but only partially connected
+- Red notification dots indicate NPCs with new content
 
 The game creates unique, personalized stories for each player through the
-combination of persona templates, AI-generated scenarios, and the story
-seeds revelation system that ensures dramatic moments unfold naturally
-through conversation.
+combination of persona templates, AI-generated scenarios, and the per-NPC
+story seed system that ensures dramatic moments unfold naturally in private
+conversations while keeping group interactions light and social.
 
 ================================================================================
-                         LAST UPDATED: 2025-12-11
+                         LAST UPDATED: 2025-12-12
 ================================================================================
