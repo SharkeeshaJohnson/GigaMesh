@@ -43,9 +43,9 @@ export type ModelConfigKey = keyof typeof MODEL_CONFIG;
 export const NPC_MODEL_POOL = [
   // Diverse models for varied NPC personalities - using full provider/model format
   // Each NPC gets a different model for unique "voice" in scenarios
-  'grok/grok-2-1212',                           // NPC 0: Grok 2 - edgy, unfiltered
-  'deepseek/deepseek-chat',                     // NPC 1: DeepSeek - reasoning focused
-  'qwen3-30b-a3b',                              // NPC 2: Qwen 30B - creative, expressive
+  'grok/grok-2-1212',                                           // NPC 0: Grok 2 - edgy, unfiltered
+  'deepseek/deepseek-chat',                                     // NPC 1: DeepSeek - reasoning focused
+  'fireworks/accounts/fireworks/models/qwen3-30b-a3b',          // NPC 2: Qwen 30B - creative, expressive
   // Note: Only 3 NPCs now, so we only need 3 diverse models
 ];
 
