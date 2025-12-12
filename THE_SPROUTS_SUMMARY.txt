@@ -202,7 +202,43 @@ NPC ATTRIBUTES
 
 EMOTIONAL STATES
 ----------------
-NPCs can express: neutral, happy, sad, angry, suspicious, loving, scared
+NPCs have rich emotional states that vary by content rating. NPCs can express
+MULTIPLE emotions simultaneously (e.g., ["happy", "horny"], ["angry", "jealous"]).
+
+The emotional state system includes 100+ unique states organized by difficulty:
+
+FAMILY-FRIENDLY STATES (22 states):
+  Basic: neutral, happy, sad, angry, anxious, confused, hopeful, grateful
+  Social: proud, embarrassed, lonely, jealous, curious, determined
+  Intense: frustrated, overwhelmed, nostalgic, content, excited, worried
+  Complex: defensive, resigned
+
+MATURE STATES (adds 40+ states):
+  Dark: bitter, resentful, spiteful, vindictive, manipulative, scheming
+  Tension: paranoid, suspicious, envious, obsessive, possessive, seething
+  Emotional: devastated, broken, numb, hollow, tormented, desperate
+  Complex: smug, calculating, predatory, unhinged, manic, dissociated
+  Moral Gray: guilt-ridden, self-destructive, masochistic, nihilistic
+
+UNFILTERED/NSFW STATES (adds 50+ states):
+  Sexual: horny, lustful, seductive, aroused, cock-hungry, insatiable
+  Power: dominant, submissive, degraded, humiliated, objectified
+  Extreme: sadistic, masochistic, voyeuristic, exhibitionistic
+  Dark: homicidal, suicidal, psychotic, deranged, bloodthirsty
+  Taboo: cuckolded, breeding-obsessed, corruption-hungry
+  Depraved: rape-fantasy, snuff-curious, incest-conflicted
+
+MULTI-EMOTION EXAMPLES:
+  - ["happy", "horny"] - Joyful arousal
+  - ["angry", "jealous"] - Possessive rage
+  - ["guilty", "aroused"] - Conflicted desire
+  - ["dominant", "sadistic"] - Power and cruelty
+  - ["desperate", "submissive"] - Needy surrender
+
+Each emotional state includes:
+  - Voice modifiers (tone, intensity, speech patterns)
+  - Speaking patterns (characteristic phrases and expressions)
+  - Combined states blend their voice qualities for layered personalities
 
 
 ================================================================================

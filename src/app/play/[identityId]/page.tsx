@@ -220,6 +220,11 @@ export default function GamePage() {
   const [revealedSeedIds, setRevealedSeedIds] = useState<string[]>([]);
   const [lastMajorRevealNpcId, setLastMajorRevealNpcId] = useState<string | null>(null);
 
+  // Streaming state for real-time NPC responses
+  const [streamingContent, setStreamingContent] = useState<string>('');
+  const [streamingNpc, setStreamingNpc] = useState<{ id: string; name: string } | null>(null);
+  const streamingContentRef = useRef<string>('');
+
   // Get current conversation's auto-converse state
   const currentConversation = allConversations.find(c => c.id === conversationId);
   const autoConverse = currentConversation?.autoConverse || false;
@@ -228,9 +233,17 @@ export default function GamePage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { sendMessage } = useChat({
+    onData: (chunk) => {
+      // Accumulate streaming content
+      streamingContentRef.current += chunk;
+      setStreamingContent(streamingContentRef.current);
+    },
     onError: (error) => {
       console.error('Chat error:', error);
       setIsResponding(false);
+      setStreamingContent('');
+      setStreamingNpc(null);
+      streamingContentRef.current = '';
     },
   });
 
@@ -541,7 +554,7 @@ export default function GamePage() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, streamingContent]); // Also scroll when streaming content updates
 
   // Save conversation whenever messages change
   useEffect(() => {
@@ -942,6 +955,11 @@ Don't interrupt with story drama. Focus on the moment.`;
       let assistantContent = '';
       let lastSimilarTo = '';
       for (let attempt = 0; attempt < 3; attempt++) {
+        // Reset streaming state for this attempt
+        streamingContentRef.current = '';
+        setStreamingContent('');
+        setStreamingNpc({ id: npc.id, name: npc.name });
+
         // On retry due to similarity, add explicit instruction
         const retryMessages = attempt > 0 && lastSimilarTo
           ? [
@@ -1042,6 +1060,11 @@ Don't interrupt with story drama. Focus on the moment.`;
         npcName: npc.name,
         isGeneratingImage: imageRequests.length > 0,
       };
+
+      // Clear streaming state now that we have the final message
+      setStreamingContent('');
+      setStreamingNpc(null);
+      streamingContentRef.current = '';
 
       // Add message immediately (possibly with loading state for image)
       setMessages((prev) => [...prev, npcMessage]);
@@ -1250,8 +1273,12 @@ Don't interrupt with story drama. Focus on the moment.`;
       };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
+      // Clean up all response/streaming state
       setIsResponding(false);
       setSelectedNpc(null);
+      setStreamingContent('');
+      setStreamingNpc(null);
+      streamingContentRef.current = '';
     }
   };
 
@@ -2490,7 +2517,86 @@ Don't interrupt with story drama. Focus on the moment.`;
               );
             })}
 
-            {isResponding && selectedNpc && (
+            {/* Streaming message display - shows real-time content as NPC responds */}
+            {streamingNpc && streamingContent && (
+              <div className="flex justify-start">
+                <div
+                  className="w-7 h-7 mr-1 flex-shrink-0 overflow-hidden"
+                  style={{
+                    background: 'var(--win95-light)',
+                    border: '1px solid var(--win95-border-dark)',
+                  }}
+                >
+                  {(() => {
+                    const npc = identity?.npcs.find(n => n.id === streamingNpc.id);
+                    return npc?.pixelArtUrl ? (
+                      <img
+                        src={npc.pixelArtUrl}
+                        alt={streamingNpc.name}
+                        className="w-full h-auto"
+                        style={{ imageRendering: 'pixelated', transform: 'scale(2.5) translateY(15%)' }}
+                      />
+                    ) : (
+                      <div className="w-full h-full" style={{ background: 'var(--win95-mid)' }} />
+                    );
+                  })()}
+                </div>
+                <div
+                  className="max-w-[75%] px-2 py-1"
+                  style={{
+                    background: 'white',
+                    border: '1px solid',
+                    borderColor: 'var(--win95-border-light) var(--win95-border-darker) var(--win95-border-darker) var(--win95-border-light)',
+                  }}
+                >
+                  <div className="win95-text" style={{ fontSize: '10px', fontWeight: 'bold', color: 'var(--win95-accent)' }}>
+                    {streamingNpc.name}
+                  </div>
+                  <div className="whitespace-pre-wrap win95-text" style={{ fontSize: '12px', lineHeight: '1.3' }}>
+                    {formatMessageContent(stripModelArtifacts(streamingContent))}
+                    <span className="inline-block w-1 h-3 ml-0.5 animate-pulse" style={{ background: 'var(--win95-accent)' }} />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Typing indicator - shows when waiting for response but no streaming content yet */}
+            {isResponding && streamingNpc && !streamingContent && (
+              <div className="flex justify-start">
+                <div
+                  className="w-7 h-7 mr-1 flex-shrink-0 overflow-hidden animate-pulse"
+                  style={{
+                    background: 'var(--win95-light)',
+                    border: '1px solid var(--win95-border-dark)',
+                  }}
+                >
+                  {(() => {
+                    const npc = identity?.npcs.find(n => n.id === streamingNpc.id);
+                    return npc?.pixelArtUrl ? (
+                      <img
+                        src={npc.pixelArtUrl}
+                        alt={streamingNpc.name}
+                        className="w-full h-auto"
+                        style={{ imageRendering: 'pixelated', transform: 'scale(2.5) translateY(15%)' }}
+                      />
+                    ) : (
+                      <div className="w-full h-full" style={{ background: 'var(--win95-mid)' }} />
+                    );
+                  })()}
+                </div>
+                <div className="win95-panel-inset px-2 py-1" style={{ background: 'white' }}>
+                  <div className="win95-text" style={{ fontSize: '10px', fontWeight: 'bold', color: 'var(--win95-accent)' }}>
+                    {streamingNpc.name}
+                  </div>
+                  <div className="win95-text win95-loading" style={{ fontSize: '11px', color: 'var(--win95-text-dim)' }}>
+                    typing
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Fallback typing indicator when no streaming NPC set yet */}
+            {isResponding && !streamingNpc && selectedNpc && (
               <div className="flex justify-start">
                 <div
                   className="w-7 h-7 mr-1 flex-shrink-0 overflow-hidden animate-pulse"
