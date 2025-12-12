@@ -439,11 +439,16 @@ export async function generateScenariosForNPCs(
       continue;
     }
 
-    const scenario = await generateDay1Scenario(npc, identity, sendMessage);
-    scenarios.set(npc.id, scenario);
+    try {
+      const scenario = await generateDay1Scenario(npc, identity, sendMessage);
+      scenarios.set(npc.id, scenario);
+    } catch (error) {
+      console.warn(`[ScenarioGen] Failed to generate scenario for ${npc.name}, using fallback:`, error);
+      scenarios.set(npc.id, getFallbackScenario(npc));
+    }
 
-    // Small delay between requests to avoid rate limiting
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Longer delay between requests to avoid rate limiting (1.5 seconds)
+    await new Promise(resolve => setTimeout(resolve, 1500));
   }
 
   return scenarios;

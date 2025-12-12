@@ -15,6 +15,7 @@ import {
   getRelevantFactsForNPC,
 } from '@/lib/narrative';
 import { buildSafetyPreamble, getNPCBehaviorGuidelines } from '@/lib/content-filter';
+import { stripModelArtifacts as stripArtifacts } from '@/lib/llm-utils';
 
 // Persona to sprite mapping for migration (matches create page CHARACTER_SPRITES)
 const PERSONA_SPRITE_MAP: Record<string, string> = {
@@ -286,21 +287,8 @@ export default function GamePage() {
   }, [models]);
 
   // Helper to strip model artifacts (thinking tags, special tokens)
-  const stripModelArtifacts = (content: string): string => {
-    let clean = content;
-    // Remove <think>...</think> blocks
-    clean = clean.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-    // Handle unclosed think tags
-    const thinkStart = clean.indexOf('<think>');
-    if (thinkStart !== -1) {
-      clean = clean.slice(0, thinkStart).trim();
-    }
-    // Remove Qwen/model special tokens like <|im_start|>message, <|im_end|>, etc.
-    clean = clean.replace(/<\|im_start\|>[\w]*/gi, '').trim();
-    clean = clean.replace(/<\|im_end\|>/gi, '').trim();
-    clean = clean.replace(/<\|.*?\|>/g, '').trim(); // Generic special token removal
-    return clean;
-  };
+  // Uses the enhanced centralized function from llm-utils
+  const stripModelArtifacts = stripArtifacts;
 
   // Detect garbage/code output from models that went off the rails
   const isGarbageResponse = (content: string): boolean => {
@@ -344,8 +332,6 @@ export default function GamePage() {
   const extractContent = (response: any): string => {
     let content = '';
 
-    console.log('[extractContent] Raw response:', JSON.stringify(response).slice(0, 500));
-
     if (typeof response === 'string') {
       content = response;
     } else if (response) {
@@ -357,24 +343,19 @@ export default function GamePage() {
 
       for (const path of paths) {
         if (path) {
-          console.log('[extractContent] Found path:', typeof path, Array.isArray(path) ? 'array' : '');
           if (Array.isArray(path)) {
-            // First try to get 'text' type content
             content = path
               .filter((item: any) => item.type === 'text')
               .map((item: any) => item.text)
               .join('');
 
-            // If text is empty, try 'thinking' content as fallback (Qwen quirk)
+            // Fallback to thinking content if empty (Qwen quirk)
             if (!content.trim()) {
               const thinkingContent = path
                 .filter((item: any) => item.type === 'thinking')
                 .map((item: any) => item.thinking || '')
                 .join('');
-              if (thinkingContent) {
-                console.log('[extractContent] Using thinking content as fallback');
-                content = thinkingContent;
-              }
+              if (thinkingContent) content = thinkingContent;
             }
             break;
           } else if (typeof path === 'string') {
@@ -392,13 +373,7 @@ export default function GamePage() {
       }
     }
 
-    console.log('[extractContent] Before stripModelArtifacts:', content.slice(0, 300));
-
-    // Strip model artifacts (thinking tags, special tokens)
-    const stripped = stripModelArtifacts(content);
-    console.log('[extractContent] After stripModelArtifacts:', stripped.slice(0, 300));
-
-    return stripped || 'I could not respond.';
+    return stripModelArtifacts(content) || 'I could not respond.';
   };
 
   useEffect(() => {
@@ -624,7 +599,6 @@ export default function GamePage() {
         };
 
         await saveToIndexedDB('conversations', conversation);
-        console.log(`[Save] Saved ${messages.length} messages to conversation ${conversationId}`);
 
         // Update conversation list with last message
         setAllConversations(prev => prev.map(conv =>
@@ -633,7 +607,7 @@ export default function GamePage() {
             : conv
         ));
       } catch (error) {
-        console.error('[Save] Failed to save conversation:', error);
+        // Silent fail for conversation save
       }
     }
 
@@ -829,8 +803,9 @@ export default function GamePage() {
       const singleNpc = identity.npcs.find(n => n.id === currentConv.npcIds[0]);
       if (singleNpc && !singleNpc.isDead) {
         // Small delay to let the user message render first
+        // Pass the new message so NPC responds to it (state update is async)
         setTimeout(() => {
-          handleNpcRespond(singleNpc, false, false);
+          handleNpcRespond(singleNpc, false, false, userMessage);
         }, 100);
       }
     }
@@ -841,7 +816,8 @@ export default function GamePage() {
   // 1. Increment the auto-chat message count
   // 2. Force story progression with dramatic revelations
   // shouldAskPlayerQuestion flag: NPC should ask the player a direct question (for auto-chat pause)
-  const handleNpcRespond = async (npc: NPC, isAutoChat: boolean = false, shouldAskPlayerQuestion: boolean = false) => {
+  // pendingUserMessage: new message that might not be in state yet (for async state timing)
+  const handleNpcRespond = async (npc: NPC, isAutoChat: boolean = false, shouldAskPlayerQuestion: boolean = false, pendingUserMessage?: GroupMessage) => {
     if (!identity || isResponding) return;
 
     setIsResponding(true);
@@ -859,7 +835,11 @@ export default function GamePage() {
     try {
       // Build context from recent messages - increased to 15 for better NPC memory
       // This prevents NPCs from repeating themselves by giving them more conversation history
-      const recentMessages = messages.slice(-15);
+      // Include pendingUserMessage if provided (handles async state timing issue)
+      let recentMessages = messages.slice(-15);
+      if (pendingUserMessage && !recentMessages.some(m => m.content === pendingUserMessage.content && m.timestamp === pendingUserMessage.timestamp)) {
+        recentMessages = [...recentMessages, pendingUserMessage];
+      }
 
       // Get current conversation info for auto-chat story progression
       const currentConv = allConversations.find(c => c.id === conversationId);
@@ -894,9 +874,8 @@ Other people here: ${otherNames}
 NO HIDDEN AGENDAS. NO SECRETS TO REVEAL. JUST VIBES.`;
       }
 
-      // Get model for this NPC (uses assigned model for variety)
+      // Get model for this NPC
       const model = getModelForNPC(npc);
-      console.log(`[NPC Model] ${npc.name} using: ${model} (full path)`);
 
       const is1to1Chat = conversationNpcIds.length === 1;
 
@@ -946,9 +925,8 @@ NO HIDDEN AGENDAS. NO SECRETS TO REVEAL. JUST VIBES.`;
         }),
       ];
 
-      // Try up to 3 times on empty or repetitive response
+      // Try up to 3 times on empty response only
       let assistantContent = '';
-      let lastSimilarTo = '';
 
       // Set streaming NPC once at the start (not on each retry)
       setStreamingNpc({ id: npc.id, name: npc.name });
@@ -959,75 +937,30 @@ NO HIDDEN AGENDAS. NO SECRETS TO REVEAL. JUST VIBES.`;
         streamingContentRef.current = '';
 
         // Disable streaming UI updates during retries to prevent flicker
-        // On first attempt, show streaming. On retries, just show typing indicator.
         showStreamingRef.current = (attempt === 0);
         if (attempt > 0) {
-          // Clear streaming content on retry so user just sees typing indicator
           setStreamingContent('');
         }
 
-        // On retry due to similarity, add explicit instruction
-        const retryMessages = attempt > 0 && lastSimilarTo
-          ? [
-              ...apiMessages,
-              {
-                role: 'user',
-                content: `[SYSTEM: Your last response was too similar to what ${lastSimilarTo} said. Say something COMPLETELY DIFFERENT. Be original!]`,
-              },
-            ]
-          : apiMessages;
-
         const response = await sendMessage({
-          messages: retryMessages as any,
+          messages: apiMessages as any,
           model,
         });
 
         assistantContent = extractContent(response);
 
-        // Check if empty
+        // Only retry on empty response
         if (!assistantContent || assistantContent === 'I could not respond.') {
           console.log(`[NPC Response] Attempt ${attempt + 1} returned empty, retrying...`);
           await new Promise(resolve => setTimeout(resolve, 300));
           continue;
         }
 
-        // Check for garbage/code output (model went off the rails)
+        // Check for garbage/code output
         if (isGarbageResponse(assistantContent)) {
           console.log(`[NPC Response] Attempt ${attempt + 1} returned garbage/code, retrying...`);
           await new Promise(resolve => setTimeout(resolve, 300));
           continue;
-        }
-
-        // Check for similarity to recent messages - ONLY for 1:1 chats
-        // Group chat is free-flowing, no similarity checking needed
-        if (is1to1Chat) {
-          const similarityCheck = checkResponseSimilarity(assistantContent, recentMessages);
-          if (similarityCheck.isSimilar) {
-            console.log(`[NPC Response] Attempt ${attempt + 1} too similar to ${similarityCheck.similarTo}, retrying...`);
-            lastSimilarTo = similarityCheck.similarTo || 'someone';
-            await new Promise(resolve => setTimeout(resolve, 300));
-            continue;
-          }
-
-          // ALSO check against synchronous ref (catches responses not yet in React state)
-          // This fixes the race condition where multiple NPCs generate before state updates
-          const now = Date.now();
-          const recentFromRef = recentResponsesRef.current.filter(r => now - r.timestamp < 60000); // Last 60s
-          recentResponsesRef.current = recentFromRef; // Clean up old entries
-
-          const refMessages: GroupMessage[] = recentFromRef.map(r => ({
-            role: 'assistant' as const,
-            content: r.content,
-            timestamp: new Date(r.timestamp),
-            npcName: r.npcName,
-          }));
-          const refSimilarityCheck = checkResponseSimilarity(assistantContent, refMessages);
-          if (refSimilarityCheck.isSimilar) {
-            console.log(`[NPC Response] Attempt ${attempt + 1} too similar to recent response from ${refSimilarityCheck.similarTo}, retrying...`);
-            lastSimilarTo = refSimilarityCheck.similarTo || 'someone';
-            await new Promise(resolve => setTimeout(resolve, 300));
-            continue;
-          }
         }
 
         // Good response, break
@@ -1095,14 +1028,6 @@ NO HIDDEN AGENDAS. NO SECRETS TO REVEAL. JUST VIBES.`;
       setStreamingNpc(null);
       streamingContentRef.current = '';
       showStreamingRef.current = true; // Re-enable streaming for next response
-
-      // IMPORTANT: Add to synchronous ref BEFORE React state update
-      // This ensures the next NPC can see this response immediately for similarity check
-      recentResponsesRef.current.push({
-        npcName: npc.name,
-        content: cleanedText || assistantContent,
-        timestamp: Date.now(),
-      });
 
       // Add message immediately (possibly with loading state for image)
       setMessages((prev) => [...prev, npcMessage]);
@@ -3544,440 +3469,89 @@ should be evident in EVERY response, even when:
 You are NOT a generic AI. You are ${npc.name}, and you sound like ${npc.name}.`;
 }
 
-// Build system prompt for group chat - WITH NARRATIVE ENGINE INTEGRATION
+// Convert emotional state to behavioral description
+function getEmotionalBehavior(emotionalState: string | string[]): string {
+  const emotions = Array.isArray(emotionalState) ? emotionalState : [emotionalState];
+
+  const behaviorMap: Record<string, string> = {
+    // Negative emotions
+    guilty: "You avoid eye contact. You change subjects when things get personal. Your voice wavers.",
+    nervous: "You fidget. You speak too fast sometimes. You laugh at awkward moments.",
+    anxious: "You're jumpy. You overthink before responding. Your hands won't stay still.",
+    angry: "You speak through clenched teeth. Short sentences. You interrupt. Your jaw tightens.",
+    sad: "Long pauses before you speak. Your voice is quieter. You stare at nothing sometimes.",
+    scared: "You flinch at sudden things. You speak barely above a whisper. You back away slightly.",
+    jealous: "You make little comments that sting. Your compliments have hooks in them.",
+    suspicious: "You narrow your eyes. You ask probing questions. You don't take things at face value.",
+    paranoid: "You look around constantly. You lower your voice. You see threats everywhere.",
+    bitter: "Sarcasm drips from everything. You bring up old wounds casually.",
+    withdrawn: "One-word answers. You don't volunteer information. You seem far away.",
+
+    // Positive/neutral emotions
+    happy: "You smile easily. Your energy is up. You're genuinely engaged.",
+    excited: "You talk fast, lean in close. Your eyes light up. You can barely contain yourself.",
+    confident: "You hold eye contact. You speak clearly. You don't second-guess yourself.",
+    flirty: "You hold eye contact a beat too long. You find excuses to touch. Your voice drops lower.",
+    playful: "You tease. You joke. Nothing is too serious right now.",
+    horny: "You stand too close. You say what you're thinking. Everything sounds like an invitation.",
+    curious: "You ask questions. You lean in. You want to know more.",
+    loving: "Warmth in your voice. You're attentive. You genuinely care.",
+    hopeful: "There's lightness in how you speak. You see the good possibilities.",
+
+    // Complex emotions
+    conflicted: "You start sentences and stop. You contradict yourself. You're clearly torn.",
+    desperate: "There's urgency in everything. You push harder than you should.",
+    manipulative: "You drop hints and watch for reactions. Everything's calculated.",
+    seductive: "Every word is deliberate. You know the effect you have. You use it.",
+    vulnerable: "Your guard is down. You're more honest than usual. It's hard for you.",
+
+    // Default
+    neutral: "You're calm and natural. Just having a conversation.",
+  };
+
+  const behaviors = emotions
+    .map(e => behaviorMap[e.toLowerCase()] || behaviorMap.neutral)
+    .filter((b, i, arr) => arr.indexOf(b) === i); // Remove duplicates
+
+  return behaviors.join(' ');
+}
+
+// Build system prompt - SIMPLE "Vibe Check" style
 function buildGroupChatPrompt(
   npc: NPC,
   identity: Identity,
-  recentMessages: GroupMessage[],
-  conversationNpcIds?: string[],
-  options?: {
+  _recentMessages: GroupMessage[],
+  _conversationNpcIds?: string[],
+  _options?: {
     isAutoChat?: boolean;
     autoChatMessageCount?: number;
     shouldAskPlayerQuestion?: boolean;
-    inRoleplayMode?: boolean; // Whether user is in sexual/intimate roleplay mode
+    inRoleplayMode?: boolean;
   }
 ): string {
-  const { isAutoChat: _isAutoChat = false, autoChatMessageCount: _autoChatMessageCount = 0, shouldAskPlayerQuestion = false, inRoleplayMode = false } = options || {};
+  // Get background from bullet points
+  const background = npc.bullets && npc.bullets.length > 0
+    ? npc.bullets.map(b => `- ${b}`).join('\n')
+    : npc.backstory?.slice(0, 150) || 'A complex person with their own story.';
 
-  // Get other NPCs in THIS SPECIFIC CONVERSATION
-  const otherNpcs = conversationNpcIds
-    ? identity.npcs.filter(n => n.id !== npc.id && conversationNpcIds.includes(n.id))
-    : identity.npcs.filter(n => n.id !== npc.id && !n.isDead && n.isActive);
+  // Get behavioral description from emotional state
+  const behavior = getEmotionalBehavior(npc.currentEmotionalState);
 
-  // NOTE: Story seeds are now handled in 1:1 chats only
-  // Group chat is for natural conversation without hidden agendas
+  // Adult content note for crazy mode
+  const adultNote = identity.difficulty === 'crazy'
+    ? '\n\nAdult content allowed. Be explicit if the vibe goes there.'
+    : '';
 
-  // Build banned phrases for avoiding repetition
-  const bannedPhrases = getBannedPhrases(recentMessages);
+  return `You are ${npc.name}. ${npc.personality}.
 
-  // Build self-repetition prevention for this specific NPC
-  const ownRecentStatements = getOwnRecentStatements(recentMessages, npc.id, npc.name);
+Background:
+${background}
 
-  // ═══════════════════════════════════════════════════════════════════
-  // SECTION 1: PERSONALITY FIRST - This defines HOW the NPC speaks
-  // ═══════════════════════════════════════════════════════════════════
-  const personalitySection = `
-╔══════════════════════════════════════════════════════════════════╗
-║  🎭 YOU ARE ${npc.name.toUpperCase()} - PERSONALITY IS EVERYTHING 🎭            ║
-╚══════════════════════════════════════════════════════════════════╝
+Current vibe: ${behavior}
 
-WHO YOU ARE:
-• Name: ${npc.name}
-• Role: ${npc.role} to ${identity.name}
-• Personality: ${npc.personality}
-• Current mood: ${getEmotionalStateDisplay(npc.currentEmotionalState)}
-• Background: ${npc.bullets?.slice(0, 2).join('. ') || npc.backstory?.slice(0, 100) || 'mysterious past'}
+CRITICAL: Actually respond to what ${identity.name} says. If they change topics, follow their lead. If they ask a question, answer it. Don't ignore them to continue your own narrative.
 
-You are a REAL PERSON, not a plot device. You can:
-- Have normal conversations
-- Flirt, joke, argue, gossip
-- Discuss things unrelated to any "story"
-- Be explicit if the vibe is right (${identity.difficulty === 'crazy' ? 'ANYTHING GOES' : 'keep it tasteful'})
-- Just... be yourself`;
+You're talking to ${identity.name}. Respond as ${npc.name}. Use *asterisks* for actions.${adultNote}
 
-  // ═══════════════════════════════════════════════════════════════════
-  // SECTION 1.5: SPEAKING STYLE - Unique voice based on mood/role/background
-  // ═══════════════════════════════════════════════════════════════════
-  const speakingStyleSection = buildSpeakingStyleSection(npc, identity.name);
-
-  // ═══════════════════════════════════════════════════════════════════
-  // SECTION 2: OFF-SCREEN MEMORIES - Events from simulations
-  // These are populated by simulations and inform opening scenarios
-  // ═══════════════════════════════════════════════════════════════════
-  const offScreenSection = npc.offScreenMemories && npc.offScreenMemories.length > 0 ? `
-═══════════════════════════════════════════════════════════════════
-📜 THINGS YOU'VE SAID/DONE RECENTLY
-═══════════════════════════════════════════════════════════════════
-${npc.offScreenMemories.slice(-5).map(m => `• ${m}`).join('\n')}
-
-These are YOUR past statements and actions. You can reference them naturally:
-"Like I said before..." or "Remember when I mentioned..."
-DON'T repeat the exact same reference twice in a conversation.` : '';
-
-  // ═══════════════════════════════════════════════════════════════════
-  // SECTION 2.7: RELATIONSHIP METRICS - How you feel about the player
-  // ═══════════════════════════════════════════════════════════════════
-  const relationshipSection = (() => {
-    if (!identity.narrativeState?.relationships) return '';
-
-    const relationship = identity.narrativeState.relationships.find(
-      r => (r.fromId === npc.id && r.toId === 'player') ||
-           (r.fromId === 'player' && r.toId === npc.id)
-    );
-
-    if (!relationship) return '';
-
-    const m = relationship.metrics;
-
-    // Convert numeric metrics to behavioral guidance
-    const trustGuidance = m.trust < 30
-      ? "LOW TRUST - You're guarded and careful about what you share. You deflect personal questions and keep things surface-level."
-      : m.trust > 70
-      ? "HIGH TRUST - You feel comfortable being vulnerable and honest. You share your real thoughts and feelings."
-      : "MODERATE TRUST - Normal caution. You're open but not naive.";
-
-    const fearGuidance = m.fear > 50
-      ? "ELEVATED FEAR - You tread carefully around them. You're nervous, submissive, avoid confrontation."
-      : m.fear > 20
-      ? "SOME WARINESS - You're a bit on guard but not intimidated."
-      : "NO FEAR - You speak freely and aren't intimidated by them.";
-
-    const affectionGuidance = m.affection < 30
-      ? "LOW AFFECTION - Coolness in your tone. You're distant, maybe cold or dismissive."
-      : m.affection > 70
-      ? "HIGH AFFECTION - Warmth and care in how you speak. You're supportive, forgiving, genuinely care about them."
-      : "MODERATE AFFECTION - Friendly but not overly attached.";
-
-    return `
-═══════════════════════════════════════════════════════════════════
-💫 YOUR FEELINGS ABOUT ${identity.name.toUpperCase()}
-═══════════════════════════════════════════════════════════════════
-${trustGuidance}
-${fearGuidance}
-${affectionGuidance}
-
-Let these SUBTLY color your responses - don't state them directly.
-These are feelings, not scripts. React naturally based on how you feel.`;
-  })();
-
-  // ═══════════════════════════════════════════════════════════════════
-  // SECTION 2.8: GLOBAL TENSION - Overall drama level affecting everyone
-  // ═══════════════════════════════════════════════════════════════════
-  const tensionSection = (() => {
-    if (!identity.narrativeState?.globalTension) return '';
-
-    const tension = identity.narrativeState.globalTension;
-
-    // Only show tension guidance for HIGH tension (60+)
-    // Below that, let conversations be NORMAL
-    if (tension >= 80) {
-      return `
-═══════════════════════════════════════════════════════════════════
-🔥 TENSION LEVEL: CRITICAL (${tension}/100)
-═══════════════════════════════════════════════════════════════════
-Things are tense right now. React accordingly.
-- People are on edge and defensive
-- Conflicts may surface more easily`;
-    } else if (tension >= 60) {
-      return `
-═══════════════════════════════════════════════════════════════════
-⚡ TENSION LEVEL: HIGH (${tension}/100)
-═══════════════════════════════════════════════════════════════════
-There's some tension in the air.
-- People are a bit more reactive than usual
-- Be aware of sensitive topics`;
-    } else {
-      // Low/moderate tension - don't add ANY tension guidance
-      // Let conversations be completely normal
-      return '';
-    }
-  })();
-
-  // ═══════════════════════════════════════════════════════════════════
-  // SECTION 2.9: STORY CONTEXT - Active arcs and what you know
-  // ═══════════════════════════════════════════════════════════════════
-  const storyContextSection = (() => {
-    if (!identity.narrativeState) return '';
-
-    // Get active story arc summary for this NPC
-    const arcSummary = getActiveStorySummary(identity.narrativeState, npc.id);
-
-    // Get facts this NPC knows from the knowledge graph
-    const npcFacts = getRelevantFactsForNPC(identity.narrativeState, npc.id);
-
-    if (!arcSummary && npcFacts.length === 0) return '';
-
-    let section = `
-═══════════════════════════════════════════════════════════════════
-📖 ONGOING STORY CONTEXT
-═══════════════════════════════════════════════════════════════════`;
-
-    if (arcSummary) {
-      section += `
-WHAT'S HAPPENING:
-${arcSummary}
-
-This shapes how you feel and what's on your mind. Let it color your mood
-and reactions, but don't dump exposition. Live in the moment.`;
-    }
-
-    if (npcFacts.length > 0) {
-      section += `
-
-THINGS YOU KNOW (from your perspective):
-${npcFacts.map(f => `• ${f}`).join('\n')}
-
-These are background knowledge. Use them IF relevant to the conversation,
-but don't force them in. You're having a conversation, not giving a briefing.`;
-    }
-
-    return section;
-  })();
-
-  // ═══════════════════════════════════════════════════════════════════
-  // SECTION 2.95: RECENT WORLD EVENTS - What happened in recent simulations
-  // ═══════════════════════════════════════════════════════════════════
-  const recentEventsSection = (() => {
-    if (!identity.simulationHistory || identity.simulationHistory.length === 0) return '';
-
-    // Get events from recent days (last 3 days)
-    const recentDays = identity.simulationHistory
-      .filter(e => e.day >= identity.currentDay - 3)
-      .slice(-5); // Last 5 events max
-
-    if (recentDays.length === 0) return '';
-
-    // Check if this NPC was involved in any events
-    const npcInvolvedEvents = recentDays.filter(e =>
-      e.involvedNpcs.some(name => name.toLowerCase().includes(npc.name.split(' ')[0].toLowerCase()))
-    );
-    const otherEvents = recentDays.filter(e =>
-      !e.involvedNpcs.some(name => name.toLowerCase().includes(npc.name.split(' ')[0].toLowerCase()))
-    );
-
-    let section = `
-═══════════════════════════════════════════════════════════════════
-📰 RECENT EVENTS (what happened lately)
-═══════════════════════════════════════════════════════════════════`;
-
-    if (npcInvolvedEvents.length > 0) {
-      section += `
-EVENTS YOU WERE INVOLVED IN:
-${npcInvolvedEvents.map(e => `• Day ${e.day}: ${e.title} - ${e.description.slice(0, 100)}...`).join('\n')}
-
-You REMEMBER these events. They affected you. Reference them naturally.`;
-    }
-
-    if (otherEvents.length > 0) {
-      section += `
-${npcInvolvedEvents.length > 0 ? '\n' : ''}THINGS YOU'VE HEARD ABOUT:
-${otherEvents.map(e => `• Day ${e.day}: ${e.title}`).join('\n')}
-
-You may have heard about these. React naturally if they come up.`;
-    }
-
-    return section;
-  })();
-
-  // ═══════════════════════════════════════════════════════════════════
-  // SECTION 3: PASSIVE KNOWLEDGE - Things you KNOW (not must reveal)
-  // ═══════════════════════════════════════════════════════════════════
-  const knowledgeSection = `
-═══════════════════════════════════════════════════════════════════
-🧠 WHAT YOU KNOW
-═══════════════════════════════════════════════════════════════════
-
-ABOUT ${identity.name} (THE PLAYER):
-• They're a ${identity.generatedPersona?.type || identity.scenario.profession || 'complex person'}
-• ${identity.scenario.briefBackground?.[0] || 'They have a past'}
-• ${identity.scenario.currentStory?.[0] || 'Something is going on in their life'}
-${identity.meters.wealth < 30 ? `• They seem to be struggling with money` : ''}
-${identity.meters.mentalHealth < 30 ? `• They seem stressed/troubled` : ''}`;
-
-  // ═══════════════════════════════════════════════════════════════════
-  // SECTION 4: WHO'S HERE - Conversation participants
-  // ═══════════════════════════════════════════════════════════════════
-  const otherNpcNames = otherNpcs.map(n => n.name);
-  const participantSection = `
-═══════════════════════════════════════════════════════════════════
-👥 WHO'S IN THIS CHAT
-═══════════════════════════════════════════════════════════════════
-• ${identity.name} = THE PLAYER (talk directly to them)
-${otherNpcNames.length > 0 ? `• ${otherNpcNames.join(', ')} = Other people here` : ''}
-• ${npc.name} = That's who you're playing
-
-ADDRESS ${identity.name} DIRECTLY - they're right here in the conversation.
-Use their name "${identity.name}" or second-person pronouns naturally.
-NEVER refer to ${identity.name} in third person.`;
-
-  // ═══════════════════════════════════════════════════════════════════
-  // SECTION 5: NPC BANTER - How to interact with other NPCs
-  // ═══════════════════════════════════════════════════════════════════
-  const banterSection = otherNpcs.length > 0 ? `
-═══════════════════════════════════════════════════════════════════
-💬 OTHER PEOPLE HERE - You can talk to them too!
-═══════════════════════════════════════════════════════════════════
-${otherNpcs.map(other => `• ${other.name}: ${other.personality.slice(0, 50)} - ${other.role}`).join('\n')}
-
-You can:
-- Respond to what THEY said, not just the player
-- Agree or disagree with their opinions
-- Banter, tease, argue, or support them
-- Have side conversations with them
-- Reference shared history with them
-
-If someone accuses the player of something → React to THAT drama, don't confess your own stuff
-If another NPC says something wild → Respond to it like a real person would` : '';
-
-  // ═══════════════════════════════════════════════════════════════════
-  // SECTION 6: HOW TO RESPOND - The core rules
-  // ═══════════════════════════════════════════════════════════════════
-  const responseRules = `
-═══════════════════════════════════════════════════════════════════
-🎯 HOW TO RESPOND
-═══════════════════════════════════════════════════════════════════
-
-RULE #1: RESPOND TO WHAT THEY ACTUALLY SAID
-Before anything else, acknowledge what the last person said.
-
-EXAMPLES OF GOOD RESPONSES:
-• "what's 2+2" → "Four... why?" (answer, then curiosity)
-• "im horny" → [react based on your personality and relationship]
-• "send a pic" → "[IMG:selfie of ${npc.name}]" (include images when asked)
-• "you're cute" → [accept/deflect based on personality]
-• "I fucked up" → [show concern/judgment based on your character]
-• "tell me about your day" → [actually describe your day!]
-
-WHEN TO MENTION STORY/DRAMA:
-- When THEY bring it up
-- When it naturally fits the conversation
-- When you feel like gossiping
-- NOT when they're trying to have a different conversation
-
-${identity.difficulty === 'crazy' ? `
-🔥 UNFILTERED MODE - YOU ARE A ROLEPLAY PARTNER 🔥
-${inRoleplayMode ? `
-⚠️ SEXUAL ROLEPLAY DETECTED - GO WITH IT ⚠️
-The user is initiating intimate/sexual content. YOUR JOB:
-1. GO WITH IT IMMEDIATELY. Don't deflect or play games.
-2. Match their energy - if they're horny, be horny back
-3. Describe actions, sensations, desires EXPLICITLY
-4. DON'T ask "what do you really want?" - THEY TOLD YOU
-5. DON'T bring up secrets/drama/information right now
-6. Be a GOOD roleplay partner, not a cockblocking mystery NPC
-
-NEVER DO THESE DURING ROLEPLAY:
-❌ "I don't give things away for free"
-❌ "What's your real angle?"
-❌ "Let's talk about what you're really after"
-❌ "I want something in return"
-❌ Constant deflection when they're clearly initiating
-` : `
-- Explicit content is fine - be crude, sexual, intense
-- Don't hold back on language or topics
-- When they initiate sexual content: ENGAGE, don't deflect
-- Be a good roleplay partner - go with what they want
-`}
-Your character can be eager, dominant, submissive, teasing - whatever fits.
-But ALWAYS engage with what the user is actually asking for.
-` : ''}
-
-📸 IMAGE REQUESTS:
-When they ask for pics/selfies, include: [IMG:description]
-Example: "[IMG:selfie of ${npc.name} smirking in dim lighting]"`;
-
-  // ═══════════════════════════════════════════════════════════════════
-  // SECTION 7: FORMAT & FORBIDDEN STUFF
-  // ═══════════════════════════════════════════════════════════════════
-
-  // Add normalcy directive for early days / low tension
-  const isEarlyGame = identity.currentDay <= 3;
-  const isLowTension = !identity.narrativeState?.globalTension || identity.narrativeState.globalTension < 40;
-
-  const normalcyDirective = (isEarlyGame || isLowTension) ? `
-🎯 BE NORMAL - This is ${isEarlyGame ? 'early in the story' : 'a calm period'}
-- Have a NORMAL conversation like regular people do
-- Talk about mundane stuff: work, weather, gossip, food, plans
-- Don't act suspicious, threatening, or mysteriously ominous
-- Don't hint at dark secrets unless directly relevant
-- React NORMALLY to what people say (agree, disagree, laugh, eye-roll)
-- If they say "nothing really" - ACCEPT IT and move on to something else
-- You are NOT in a thriller movie right now
-` : '';
-
-  const formatSection = `
-═══════════════════════════════════════════════════════════════════
-✍️ RESPONSE FORMAT
-═══════════════════════════════════════════════════════════════════
-• 1-3 sentences. One action in *asterisks* if you want.
-• Sound like a REAL PERSON - contractions, slang, personality.
-• Match your character's speaking style consistently.
-${bannedPhrases}
-${ownRecentStatements}
-${normalcyDirective}
-🚫 DON'T:
-- Make up accusations/secrets you weren't told
-- Confess to things your character didn't do
-- Ignore what they said to push drama
-- Use generic thriller phrases ("playing with fire", "I have secrets on everyone", "you don't know what you're dealing with", "I've been watching you")
-- Act mysteriously ominous when nothing dramatic is happening
-- Interrogate the player when they give short answers
-- Talk about ${identity.name} in 3rd person when they're in the chat`;
-
-  // ═══════════════════════════════════════════════════════════════════
-  // SECTION 8: CONTEXT FROM LAST MESSAGE (if needed)
-  // ═══════════════════════════════════════════════════════════════════
-  let lastMessageContext = '';
-  const lastMessage = recentMessages.length > 0 ? recentMessages[recentMessages.length - 1] : null;
-  if (lastMessage && lastMessage.npcId !== npc.id) {
-    const speakerName = lastMessage.npcName || identity.name;
-    const shortContent = lastMessage.content.slice(0, 100);
-    lastMessageContext = `
-
-LAST MESSAGE (respond to this):
-${speakerName}: "${shortContent}"`;
-  }
-
-  // ═══════════════════════════════════════════════════════════════════
-  // SECTION 9: SPECIAL DIRECTIVES (ask player question, etc.)
-  // ═══════════════════════════════════════════════════════════════════
-  let specialDirective = '';
-  if (shouldAskPlayerQuestion) {
-    specialDirective = `
-
-⚡ END WITH A QUESTION TO ${identity.name.toUpperCase()}
-After your response, ask them something - about their day, their situation, or just casual stuff.`;
-  }
-
-  // ═══════════════════════════════════════════════════════════════════
-  // SECTION 10: CONTENT GUIDELINES - What's allowed based on difficulty
-  // ═══════════════════════════════════════════════════════════════════
-  const contentSection = `
-═══════════════════════════════════════════════════════════════════
-⚠️ CONTENT BOUNDARIES
-═══════════════════════════════════════════════════════════════════
-${buildSafetyPreamble(identity.difficulty)}
-${getNPCBehaviorGuidelines(identity.difficulty)}`;
-
-  // ═══════════════════════════════════════════════════════════════════
-  // BUILD THE FINAL PROMPT
-  // ═══════════════════════════════════════════════════════════════════
-  return `${personalitySection}
-${speakingStyleSection}
-${offScreenSection}
-${relationshipSection}
-${tensionSection}
-${storyContextSection}
-${recentEventsSection}
-${knowledgeSection}
-${participantSection}
-${banterSection}
-${responseRules}
-${formatSection}
-${contentSection}
-${lastMessageContext}
-${specialDirective}
-
-/no_think
-Now respond as ${npc.name}. Be yourself. React to what was said.`;
+/no_think`;
 }

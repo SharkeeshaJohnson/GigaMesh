@@ -1,26 +1,26 @@
 export const MODEL_CONFIG = {
-  // === Using Grok 2 as default (reliable, unfiltered) ===
-  // Format: provider/model-name
+  // === Using Grok 4 as default ===
+  // Format: grok/model-name
 
   // Default NPC model - fallback if no assigned model
-  npc: 'grok/grok-2-1212',
+  npc: 'grok/grok-4-fast-non-reasoning',
 
   // Scenario generation
-  scenarioGeneration: 'grok/grok-2-1212',
+  scenarioGeneration: 'grok/grok-4-fast-non-reasoning',
 
   // Simulation events
-  simulation: 'grok/grok-2-1212',
+  simulation: 'grok/grok-4-fast-non-reasoning',
 
   // === Standard Models ===
 
   // Memory extraction (structured output)
-  memoryExtraction: 'grok/grok-2-1212',
+  memoryExtraction: 'grok/grok-4-fast-non-reasoning',
 
   // Embeddings - content-agnostic vector math
   embedding: 'openai/text-embedding-3-small',
 
   // Fallback fast model
-  fallbackFast: 'grok/grok-2-1212',
+  fallbackFast: 'grok/grok-4-fast-non-reasoning',
 } as const;
 
 export type ModelConfigKey = keyof typeof MODEL_CONFIG;
@@ -41,12 +41,10 @@ export type ModelConfigKey = keyof typeof MODEL_CONFIG;
  * Model IDs match the Portals API short names (not full Fireworks paths)
  */
 export const NPC_MODEL_POOL = [
-  // Diverse models for varied NPC personalities - using full provider/model format
-  // Each NPC gets a different model for unique "voice" in scenarios
-  'grok/grok-2-1212',                                           // NPC 0: Grok 2 - edgy, unfiltered
-  'fireworks/accounts/fireworks/models/deepseek-v3-0324',       // NPC 1: DeepSeek V3 - reasoning focused
-  'fireworks/accounts/fireworks/models/qwen3-30b-a3b',          // NPC 2: Qwen 30B - creative, expressive
-  // Note: Only 3 NPCs now, so we only need 3 diverse models
+  // Using Grok 4
+  'grok/grok-4-fast-non-reasoning',
+  'grok/grok-4-fast-non-reasoning',
+  'grok/grok-4-fast-non-reasoning',
 ];
 
 /**

@@ -37,6 +37,29 @@ import { getEmotionalStatesForRating, getRandomEmotionalStates, getEmotionCountF
 
 type CreationStep = 'difficulty' | 'character' | 'loading' | 'complete';
 
+// Retry helper for API calls with exponential backoff
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelayMs: number = 1000
+): Promise<T> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error as Error;
+      console.warn(`[Retry] Attempt ${attempt + 1}/${maxRetries} failed:`, error);
+      if (attempt < maxRetries - 1) {
+        const delay = baseDelayMs * Math.pow(2, attempt); // Exponential backoff
+        console.log(`[Retry] Waiting ${delay}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  throw lastError || new Error('Max retries exceeded');
+}
+
 // Helper function to fix common text formatting issues from AI-generated content
 function cleanupAIText(text: string): string {
   if (!text) return text;
@@ -240,12 +263,15 @@ function CreatePageContent() {
     try {
       setLoadingMessage('Creating your scenario...');
       const scenarioPrompt = buildScenarioPrompt(selectedDifficulty, persona);
-      const scenarioResponse = await sendMessage({
+      console.log('[Create] Sending scenario request with model:', MODEL_CONFIG.scenarioGeneration);
+      const scenarioResponse = await withRetry(() => sendMessage({
         messages: [{ role: 'user', content: scenarioPrompt }],
         model: MODEL_CONFIG.scenarioGeneration,
-      });
+      }));
+      console.log('[Create] Raw scenario response:', JSON.stringify(scenarioResponse)?.substring(0, 1000));
 
       const scenarioContent = extractContentFromResponse(scenarioResponse);
+      console.log('[Create] Extracted scenario content:', scenarioContent?.substring(0, 500) || '(empty)');
       const scenarioData = parseJSONSafely<{
         playerName: string;
         gender: string;
@@ -273,11 +299,11 @@ function CreatePageContent() {
       setLoadingStep(1);
       setLoadingMessage('Designing characters...');
 
-      const npcsPrompt = buildNPCsPrompt(scenarioData, selectedDifficulty, persona, 5);
-      const npcsResponse = await sendMessage({
+      const npcsPrompt = buildNPCsPrompt(scenarioData, selectedDifficulty, persona, INITIAL_NPC_COUNT);
+      const npcsResponse = await withRetry(() => sendMessage({
         messages: [{ role: 'user', content: npcsPrompt }],
         model: MODEL_CONFIG.scenarioGeneration,
-      });
+      }));
 
       const npcsContent = extractContentFromResponse(npcsResponse);
       const allNpcs = parseJSONArraySafely<{
@@ -384,7 +410,14 @@ function CreatePageContent() {
       setStep('complete');
     } catch (error) {
       console.error('Failed to generate scenario:', error);
-      setLoadingMessage('Failed to generate scenario. Please try again.');
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      if (errorMsg.includes('500') || errorMsg.toLowerCase().includes('server error')) {
+        setLoadingMessage('AI service temporarily unavailable. Please try again in a moment.');
+      } else if (errorMsg.toLowerCase().includes('rate') || errorMsg.toLowerCase().includes('limit')) {
+        setLoadingMessage('Too many requests. Please wait a moment and try again.');
+      } else {
+        setLoadingMessage(`Failed to generate scenario: ${errorMsg}`);
+      }
     }
   };
 
@@ -1072,7 +1105,9 @@ REQUIREMENTS:
 - DO NOT mention specific NPC names - use generic references like "a coworker", "their spouse"
 - Focus on the PLAYER'S situation, secrets, and challenges
 
-IMPORTANT: Output ONLY the JSON object. No explanation, no markdown code blocks. Just raw JSON.`;
+IMPORTANT: Output ONLY the JSON object. No explanation, no markdown code blocks, no tool calls. Just raw JSON text.
+
+Do NOT use any tools or function calls. Respond with plain text JSON only.`;
 }
 
 function buildNPCsPrompt(
@@ -1120,7 +1155,7 @@ Be EXPLICIT and RAW - this is adult content. Don't hold back.`;
 
 ${npcBehavior}
 
-Player: ${scenario.playerName} (${persona.type})
+Player: ${scenario.playerName}
 Profession: ${scenario.profession}
 Background: ${scenario.briefBackground?.join(' ') || ''}
 

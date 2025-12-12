@@ -14,6 +14,13 @@ export function stripModelArtifacts(content: string): string {
 
   let clean = content;
 
+  // First pass: Remove complete <|im_start|>...<think>...</think> patterns (Qwen)
+  // This handles patterns like: <|im_start|>assistant<think></think>
+  clean = clean.replace(/<\|im_start\|>\s*\w*\s*<think>[\s\S]*?<\/think>/gi, '').trim();
+
+  // Second pass: Remove <|im_start|>...<|im_end|> blocks
+  clean = clean.replace(/<\|im_start\|>[\s\S]*?<\|im_end\|>/gi, '').trim();
+
   // Remove <think>...</think> blocks (Qwen models)
   clean = clean.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
@@ -23,10 +30,33 @@ export function stripModelArtifacts(content: string): string {
     clean = clean.slice(0, thinkStart).trim();
   }
 
-  // Remove Qwen/model special tokens like <|im_start|>message, <|im_end|>, etc.
-  clean = clean.replace(/<\|im_start\|>[\w]*/gi, '').trim();
+  // Remove standalone Qwen/model special tokens like <|im_start|>assistant, <|im_end|>, etc.
+  clean = clean.replace(/<\|im_start\|>\s*\w*/gi, '').trim();
   clean = clean.replace(/<\|im_end\|>/gi, '').trim();
   clean = clean.replace(/<\|.*?\|>/g, '').trim(); // Generic special token removal
+
+  // Remove DeepSeek placeholder tokens (uses special Unicode characters)
+  // Pattern: <｜placeholder▁text｜> or similar with fullwidth characters
+  clean = clean.replace(/<[｜\|][^>]*[｜\|]>/g, '').trim();
+
+  // Remove DeepSeek tool/unlock instructions that leak through
+  // These are internal API artifacts that shouldn't appear in responses
+  clean = clean.replace(/You must unlock.*?tool[s]? first.*?After you unlock them,?\s*I'll respond.*?\./gi, '').trim();
+  clean = clean.replace(/Please call the `__\w+__` tool.*?\./gi, '').trim();
+  clean = clean.replace(/__\w+__/g, '').trim(); // Remove any __function_name__ patterns
+
+  // Remove DeepSeek/other model artifacts
+  clean = clean.replace(/^assistant\s*:\s*/i, '').trim(); // Remove "assistant:" prefix
+  clean = clean.replace(/^[\s\n]*role\s*:\s*assistant[\s\n]*/i, '').trim(); // Remove role: assistant
+  clean = clean.replace(/^[\s\n]*content\s*:\s*/i, '').trim(); // Remove content: prefix
+
+  // If after all cleaning we just have the NPC name repeated, clear it
+  // This catches cases like "Santiago\nSantiago" with no actual content
+  const lines = clean.split('\n').map(l => l.trim()).filter(Boolean);
+  if (lines.length <= 2 && lines.every(l => l.length < 30 && !l.includes(' '))) {
+    // Likely just repeated names with no content - return empty to trigger retry
+    clean = '';
+  }
 
   return clean;
 }
@@ -186,9 +216,18 @@ export function parseJSONSafely<T = unknown>(content: string): T | null {
       cleanContent = cleanContent.slice(0, thinkStart);
     }
 
+    // Remove markdown code blocks (```json ... ``` or ``` ... ```)
+    cleanContent = cleanContent.replace(/```(?:json)?\s*([\s\S]*?)```/gi, '$1').trim();
+
+    // Log for debugging
+    console.log('[parseJSONSafely] Cleaned content preview:', cleanContent.substring(0, 200));
+
     // Try to find JSON object
     const jsonStart = cleanContent.indexOf('{');
-    if (jsonStart === -1) return null;
+    if (jsonStart === -1) {
+      console.log('[parseJSONSafely] No JSON object found in content');
+      return null;
+    }
 
     let jsonStr = cleanContent.slice(jsonStart);
 
@@ -267,8 +306,17 @@ export function parseJSONArraySafely<T = unknown>(content: string): T[] {
       cleanContent = cleanContent.slice(0, thinkStart);
     }
 
+    // Remove markdown code blocks (```json ... ``` or ``` ... ```)
+    cleanContent = cleanContent.replace(/```(?:json)?\s*([\s\S]*?)```/gi, '$1').trim();
+
+    // Log for debugging
+    console.log('[parseJSONArraySafely] Cleaned content preview:', cleanContent.substring(0, 200));
+
     const arrayStart = cleanContent.indexOf('[');
-    if (arrayStart === -1) return [];
+    if (arrayStart === -1) {
+      console.log('[parseJSONArraySafely] No JSON array found in content');
+      return [];
+    }
 
     let jsonStr = cleanContent.slice(arrayStart);
 
