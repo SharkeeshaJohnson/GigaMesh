@@ -225,6 +225,9 @@ export default function GamePage() {
   // This is updated immediately when a response is generated, before React state updates
   const recentResponsesRef = useRef<{ npcName: string; content: string; timestamp: number }[]>([]);
 
+  // Ref to control whether streaming updates should show in UI (disabled during retries)
+  const showStreamingRef = useRef<boolean>(true);
+
   // Get current conversation's auto-converse state
   const currentConversation = allConversations.find(c => c.id === conversationId);
   const autoConverse = currentConversation?.autoConverse || false;
@@ -236,7 +239,10 @@ export default function GamePage() {
     onData: (chunk) => {
       // Accumulate streaming content
       streamingContentRef.current += chunk;
-      setStreamingContent(streamingContentRef.current);
+      // Only update UI if streaming is enabled (disabled during retries to prevent flicker)
+      if (showStreamingRef.current) {
+        setStreamingContent(streamingContentRef.current);
+      }
     },
     onError: (error) => {
       console.error('Chat error:', error);
@@ -244,6 +250,7 @@ export default function GamePage() {
       setStreamingContent('');
       setStreamingNpc(null);
       streamingContentRef.current = '';
+      showStreamingRef.current = true; // Reset on error
     },
   });
 
@@ -991,11 +998,22 @@ Don't interrupt with story drama. Focus on the moment.`;
       // Try up to 3 times on empty or repetitive response
       let assistantContent = '';
       let lastSimilarTo = '';
+
+      // Set streaming NPC once at the start (not on each retry)
+      setStreamingNpc({ id: npc.id, name: npc.name });
+      setStreamingContent('');
+
       for (let attempt = 0; attempt < 3; attempt++) {
-        // Reset streaming state for this attempt
+        // Reset streaming ref for this attempt
         streamingContentRef.current = '';
-        setStreamingContent('');
-        setStreamingNpc({ id: npc.id, name: npc.name });
+
+        // Disable streaming UI updates during retries to prevent flicker
+        // On first attempt, show streaming. On retries, just show typing indicator.
+        showStreamingRef.current = (attempt === 0);
+        if (attempt > 0) {
+          // Clear streaming content on retry so user just sees typing indicator
+          setStreamingContent('');
+        }
 
         // On retry due to similarity, add explicit instruction
         const retryMessages = attempt > 0 && lastSimilarTo
@@ -1122,6 +1140,7 @@ Don't interrupt with story drama. Focus on the moment.`;
       setStreamingContent('');
       setStreamingNpc(null);
       streamingContentRef.current = '';
+      showStreamingRef.current = true; // Re-enable streaming for next response
 
       // IMPORTANT: Add to synchronous ref BEFORE React state update
       // This ensures the next NPC can see this response immediately for similarity check
@@ -1331,6 +1350,7 @@ Don't interrupt with story drama. Focus on the moment.`;
       setStreamingContent('');
       setStreamingNpc(null);
       streamingContentRef.current = '';
+      showStreamingRef.current = true; // Re-enable streaming for next response
     }
   };
 
