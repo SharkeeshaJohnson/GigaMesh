@@ -1312,9 +1312,15 @@ export const PERSONA_POOLS: Record<ContentRating, PersonaTemplate[]> = {
 
 /**
  * NPC archetype pools by content rating
+ * Expanded with ~35 archetypes per level for maximum variety
+ * Based on character dynamics research and storytelling archetypes
  */
 export const NPC_ARCHETYPE_POOLS: Record<ContentRating, NPCArchetype[]> = {
+  // ============================================================================
+  // FAMILY-FRIENDLY (Realistic) - Workplace, family, and social dynamics
+  // ============================================================================
   'family-friendly': [
+    // === WORKPLACE ARCHETYPES (12) ===
     {
       id: 'supportive-partner',
       type: 'Supportive Partner',
@@ -1330,7 +1336,7 @@ export const NPC_ARCHETYPE_POOLS: Record<ContentRating, NPCArchetype[]> = {
       id: 'demanding-boss',
       type: 'Demanding Boss',
       traits: ['strict', 'fair', 'high expectations', 'mentoring'],
-      relationshipTypes: ['Boss', 'Supervisor', 'Business Partner'],
+      relationshipTypes: ['Boss', 'Supervisor', 'Department Head'],
       secretHints: [
         'Under pressure from their own superiors',
         'Sees potential in the player but pushes hard',
@@ -1338,10 +1344,21 @@ export const NPC_ARCHETYPE_POOLS: Record<ContentRating, NPCArchetype[]> = {
       ],
     },
     {
+      id: 'supportive-mentor',
+      type: 'Supportive Mentor',
+      traits: ['encouraging', 'experienced', 'protective', 'wise'],
+      relationshipTypes: ['Senior Colleague', 'Mentor', 'Former Boss'],
+      secretHints: [
+        'Sees themselves in the player',
+        'Made mistakes they want to help others avoid',
+        'Has connections they rarely mention',
+      ],
+    },
+    {
       id: 'competitive-peer',
       type: 'Competitive Colleague',
       traits: ['ambitious', 'friendly rival', 'insecure', 'talented'],
-      relationshipTypes: ['Coworker', 'Classmate', 'Neighbor'],
+      relationshipTypes: ['Coworker', 'Peer', 'Team Member'],
       secretHints: [
         'Jealous of what the player has',
         'Actually admires the player secretly',
@@ -1349,10 +1366,100 @@ export const NPC_ARCHETYPE_POOLS: Record<ContentRating, NPCArchetype[]> = {
       ],
     },
     {
+      id: 'office-gossip',
+      type: 'Office Gossip',
+      traits: ['chatty', 'observant', 'friendly', 'indiscreet'],
+      relationshipTypes: ['Coworker', 'Receptionist', 'Admin'],
+      secretHints: [
+        'Knows everyone\'s secrets but plays dumb',
+        'Has been overlooked for promotion for years',
+        'Actually very lonely outside of work',
+      ],
+    },
+    {
+      id: 'eager-newcomer',
+      type: 'Eager Newcomer',
+      traits: ['enthusiastic', 'naive', 'hardworking', 'impressionable'],
+      relationshipTypes: ['New Hire', 'Intern', 'Junior Colleague'],
+      secretHints: [
+        'Has connections nobody knows about',
+        'Not as inexperienced as they pretend',
+        'Desperately needs this job to work out',
+      ],
+    },
+    {
+      id: 'burnt-out-veteran',
+      type: 'Burnt-out Veteran',
+      traits: ['cynical', 'experienced', 'helpful when motivated', 'tired'],
+      relationshipTypes: ['Senior Colleague', 'Retiring Employee', 'Old Guard'],
+      secretHints: [
+        'Counting days until retirement',
+        'Has seen too many people come and go',
+        'Knows where all the skeletons are buried',
+      ],
+    },
+    {
+      id: 'client-from-hell',
+      type: 'Difficult Client',
+      traits: ['demanding', 'wealthy', 'entitled', 'unpredictable'],
+      relationshipTypes: ['Client', 'Customer', 'Account'],
+      secretHints: [
+        'Their business is more important than anyone knows',
+        'Has gotten others fired before',
+        'Actually respects people who push back',
+      ],
+    },
+    {
+      id: 'hr-watchdog',
+      type: 'HR Representative',
+      traits: ['by-the-book', 'observant', 'neutral', 'thorough'],
+      relationshipTypes: ['HR Manager', 'Compliance Officer', 'Administrator'],
+      secretHints: [
+        'Has a file on everyone',
+        'Knows more about office drama than anyone',
+        'Has been asked to look the other way before',
+      ],
+    },
+    {
+      id: 'tech-wizard',
+      type: 'IT Specialist',
+      traits: ['introverted', 'brilliant', 'helpful', 'observant'],
+      relationshipTypes: ['IT Support', 'Developer', 'Tech Lead'],
+      secretHints: [
+        'Has access to everyone\'s emails and files',
+        'Knows exactly who\'s been looking at what',
+        'Underestimated by everyone',
+      ],
+    },
+    {
+      id: 'ambitious-climber',
+      type: 'Ambitious Climber',
+      traits: ['driven', 'charming', 'calculating', 'well-connected'],
+      relationshipTypes: ['Coworker', 'Team Lead', 'Rising Star'],
+      secretHints: [
+        'Will step on anyone to get ahead',
+        'Has dirt on key people',
+        'Playing a longer game than anyone realizes',
+      ],
+    },
+    {
+      id: 'union-rep',
+      type: 'Employee Advocate',
+      traits: ['principled', 'stubborn', 'protective', 'confrontational'],
+      relationshipTypes: ['Union Rep', 'Senior Employee', 'Advocate'],
+      secretHints: [
+        'Has fought battles others don\'t know about',
+        'Knows the company\'s legal vulnerabilities',
+        'Has been threatened by management before',
+      ],
+    },
+
+    // === FAMILY ARCHETYPES (12) ===
+    {
       id: 'wise-elder',
       type: 'Wise Elder',
       traits: ['experienced', 'sometimes critical', 'caring', 'traditional'],
-      relationshipTypes: ['Parent', 'Grandparent', 'Mentor'],
+      relationshipTypes: ['Parent', 'Grandparent', 'Elder Relative'],
       secretHints: [
         'Made similar mistakes in their youth',
         'Health problems they are hiding',
@@ -1360,19 +1467,223 @@ export const NPC_ARCHETYPE_POOLS: Record<ContentRating, NPCArchetype[]> = {
       ],
     },
     {
+      id: 'overbearing-parent',
+      type: 'Overbearing Parent',
+      traits: ['controlling', 'well-meaning', 'anxious', 'critical'],
+      relationshipTypes: ['Mother', 'Father', 'Guardian'],
+      secretHints: [
+        'Their own parents were worse',
+        'Terrified of losing their child',
+        'Living vicariously through the player',
+      ],
+    },
+    {
+      id: 'distant-parent',
+      type: 'Distant Parent',
+      traits: ['workaholic', 'emotionally unavailable', 'guilty', 'generous with money'],
+      relationshipTypes: ['Father', 'Mother', 'Absent Parent'],
+      secretHints: [
+        'Doesn\'t know how to express love',
+        'Regrets the time they missed',
+        'Has a whole life the player knows nothing about',
+      ],
+    },
+    {
+      id: 'golden-child-sibling',
+      type: 'Golden Child Sibling',
+      traits: ['successful', 'smug', 'competitive', 'secretly insecure'],
+      relationshipTypes: ['Brother', 'Sister', 'Sibling'],
+      secretHints: [
+        'The pressure of expectations is crushing them',
+        'Jealous of the player\'s freedom',
+        'Their success isn\'t what it seems',
+      ],
+    },
+    {
       id: 'troubled-relative',
       type: 'Troubled Relative',
       traits: ['struggling', 'needy', 'good-hearted', 'unreliable'],
-      relationshipTypes: ['Sibling', 'Cousin', 'In-law'],
+      relationshipTypes: ['Sibling', 'Cousin', 'Niece/Nephew'],
       secretHints: [
         'Dealing with issues nobody talks about',
         'Feels like the family disappointment',
         'Actually trying harder than anyone knows',
       ],
     },
+    {
+      id: 'meddling-in-law',
+      type: 'Meddling In-Law',
+      traits: ['opinionated', 'intrusive', 'traditional', 'well-meaning'],
+      relationshipTypes: ['Mother-in-Law', 'Father-in-Law', 'In-Law'],
+      secretHints: [
+        'Never thought the player was good enough',
+        'Protecting their child in their own way',
+        'Has marriage problems of their own',
+      ],
+    },
+    {
+      id: 'cool-relative',
+      type: 'Cool Relative',
+      traits: ['fun', 'unconventional', 'supportive', 'irresponsible'],
+      relationshipTypes: ['Uncle', 'Aunt', 'Older Cousin'],
+      secretHints: [
+        'Their lifestyle has consequences they hide',
+        'Wishes they had what the player has',
+        'Running from something in their past',
+      ],
+    },
+    {
+      id: 'struggling-teen',
+      type: 'Struggling Teen',
+      traits: ['rebellious', 'confused', 'searching', 'vulnerable'],
+      relationshipTypes: ['Child', 'Niece/Nephew', 'Godchild'],
+      secretHints: [
+        'Being bullied or pressured at school',
+        'Experimenting with things parents don\'t know',
+        'Desperately needs guidance but won\'t ask',
+      ],
+    },
+    {
+      id: 'estranged-relative',
+      type: 'Estranged Relative',
+      traits: ['distant', 'mysterious', 'carrying old wounds', 'unpredictable'],
+      relationshipTypes: ['Estranged Parent', 'Long-lost Sibling', 'Distant Relative'],
+      secretHints: [
+        'Left for reasons nobody talks about',
+        'Has built a completely different life',
+        'Reaching out now for a specific reason',
+      ],
+    },
+    {
+      id: 'family-peacemaker',
+      type: 'Family Peacemaker',
+      traits: ['diplomatic', 'exhausted', 'self-sacrificing', 'resentful underneath'],
+      relationshipTypes: ['Sibling', 'Spouse', 'Parent'],
+      secretHints: [
+        'Tired of always being the one who fixes things',
+        'Has their own problems nobody asks about',
+        'Close to their breaking point',
+      ],
+    },
+    {
+      id: 'dependent-parent',
+      type: 'Dependent Parent',
+      traits: ['aging', 'proud', 'stubborn', 'declining'],
+      relationshipTypes: ['Elderly Parent', 'Grandparent', 'Aging Relative'],
+      secretHints: [
+        'Health is worse than they let on',
+        'Terrified of losing independence',
+        'Has secrets from their past emerging',
+      ],
+    },
+    {
+      id: 'prodigal-relative',
+      type: 'Prodigal Relative',
+      traits: ['returning', 'changed', 'seeking redemption', 'uncertain'],
+      relationshipTypes: ['Returning Sibling', 'Wayward Child', 'Reformed Relative'],
+      secretHints: [
+        'Running from something',
+        'Needs money or help they won\'t admit',
+        'Has genuinely changed but nobody believes it',
+      ],
+    },
+
+    // === SOCIAL/COMMUNITY ARCHETYPES (8) ===
+    {
+      id: 'nosy-neighbor',
+      type: 'Nosy Neighbor',
+      traits: ['curious', 'helpful', 'gossip-prone', 'well-intentioned'],
+      relationshipTypes: ['Neighbor', 'Community Member', 'HOA President'],
+      secretHints: [
+        'Knows more about everyone than they let on',
+        'Actually very lonely',
+        'Has been burned by trusting before',
+      ],
+    },
+    {
+      id: 'old-school-friend',
+      type: 'Old School Friend',
+      traits: ['nostalgic', 'familiar', 'changed', 'reconnecting'],
+      relationshipTypes: ['High School Friend', 'College Friend', 'Childhood Friend'],
+      secretHints: [
+        'Their life didn\'t turn out as planned',
+        'Remembers things the player has forgotten',
+        'Reconnecting for a reason',
+      ],
+    },
+    {
+      id: 'new-friend',
+      type: 'New Friend',
+      traits: ['interesting', 'mysterious', 'engaging', 'has baggage'],
+      relationshipTypes: ['New Friend', 'Acquaintance', 'Gym Buddy'],
+      secretHints: [
+        'Just went through something major',
+        'Seeking connection after a loss',
+        'Not telling the whole story about their past',
+      ],
+    },
+    {
+      id: 'old-rival',
+      type: 'Old Rival',
+      traits: ['competitive', 'successful', 'smug', 'grudging respect'],
+      relationshipTypes: ['Former Classmate', 'Ex-Colleague', 'Competitor'],
+      secretHints: [
+        'Still measuring themselves against the player',
+        'Their success isn\'t what it appears',
+        'Actually envies something the player has',
+      ],
+    },
+    {
+      id: 'ex-presence',
+      type: 'The Ex Who\'s Still Around',
+      traits: ['awkward', 'unresolved', 'friendly', 'complicated'],
+      relationshipTypes: ['Ex-Partner', 'Former Spouse', 'Ex-Boyfriend/Girlfriend'],
+      secretHints: [
+        'Still has feelings they hide',
+        'Moved on but not completely',
+        'Knows secrets about the player\'s past',
+      ],
+    },
+    {
+      id: 'community-leader',
+      type: 'Community Leader',
+      traits: ['respected', 'busy', 'connected', 'politically minded'],
+      relationshipTypes: ['Local Official', 'Religious Leader', 'Community Organizer'],
+      secretHints: [
+        'Has more power than their title suggests',
+        'Knows everyone\'s business',
+        'Has made compromises to get where they are',
+      ],
+    },
+    {
+      id: 'local-business-owner',
+      type: 'Local Business Owner',
+      traits: ['hardworking', 'community-focused', 'stressed', 'proud'],
+      relationshipTypes: ['Shop Owner', 'Restaurant Owner', 'Local Entrepreneur'],
+      secretHints: [
+        'Business is struggling more than anyone knows',
+        'Has seen the neighborhood change',
+        'Owes favors to the wrong people',
+      ],
+    },
+    {
+      id: 'helpful-professional',
+      type: 'Helpful Professional',
+      traits: ['competent', 'caring', 'boundaried', 'observant'],
+      relationshipTypes: ['Doctor', 'Therapist', 'Lawyer', 'Financial Advisor'],
+      secretHints: [
+        'Knows things about the player others don\'t',
+        'Has seen concerning patterns',
+        'Bound by confidentiality but worried',
+      ],
+    },
   ],
 
+  // ============================================================================
+  // MATURE (Dramatic) - Affairs, secrets, manipulation, betrayal
+  // ============================================================================
   'mature': [
+    // === TEMPTATION/AFFAIR ARCHETYPES (10) ===
     {
       id: 'tempting-alternative',
       type: 'Tempting Alternative',
@@ -1385,16 +1696,174 @@ export const NPC_ARCHETYPE_POOLS: Record<ContentRating, NPCArchetype[]> = {
       ],
     },
     {
+      id: 'the-ex-who-wants-back',
+      type: 'The Ex Who Wants You Back',
+      traits: ['persistent', 'nostalgic', 'changed', 'desperate'],
+      relationshipTypes: ['Ex-Spouse', 'Ex-Partner', 'Former Lover'],
+      secretHints: [
+        'Left someone to come back',
+        'Realizes what they lost',
+        'May not have fully changed',
+      ],
+    },
+    {
+      id: 'forbidden-crush',
+      type: 'Forbidden Crush',
+      traits: ['magnetic', 'off-limits', 'reciprocating', 'conflicted'],
+      relationshipTypes: ['Friend\'s Spouse', 'Boss', 'Employee', 'Student'],
+      secretHints: [
+        'The attraction is mutual',
+        'Has thought about crossing the line',
+        'Would risk everything for a chance',
+      ],
+    },
+    {
+      id: 'flirty-neighbor',
+      type: 'Flirty Neighbor',
+      traits: ['friendly', 'suggestive', 'convenient', 'lonely'],
+      relationshipTypes: ['Neighbor', 'Building Resident', 'Local Regular'],
+      secretHints: [
+        'In an unhappy relationship',
+        'Has noticed more than they let on',
+        'Looking for escape from their life',
+      ],
+    },
+    {
+      id: 'conference-fling',
+      type: 'Conference Connection',
+      traits: ['professional', 'exciting', 'temporary', 'intense'],
+      relationshipTypes: ['Colleague from Another Office', 'Conference Contact', 'Industry Peer'],
+      secretHints: [
+        'What happens at the conference...',
+        'Looking for something missing at home',
+        'More interested than they should be',
+      ],
+    },
+    {
+      id: 'online-connection',
+      type: 'Online Connection',
+      traits: ['mysterious', 'attentive', 'understanding', 'escalating'],
+      relationshipTypes: ['Online Friend', 'Gaming Friend', 'Social Media Connection'],
+      secretHints: [
+        'Not entirely who they claim to be',
+        'Has been watching longer than admitted',
+        'Ready to take it offline',
+      ],
+    },
+    {
+      id: 'friends-ex',
+      type: 'Friend\'s Ex',
+      traits: ['available', 'complicated', 'attractive', 'brings drama'],
+      relationshipTypes: ['Friend\'s Ex-Partner', 'Recent Divorcee', 'Off-Limits Interest'],
+      secretHints: [
+        'The breakup was messier than anyone knows',
+        'Has always been attracted to the player',
+        'Would love to make the friend jealous',
+      ],
+    },
+    {
+      id: 'wedding-guest',
+      type: 'Wedding Guest',
+      traits: ['caught up in romance', 'drinking', 'lonely', 'impulsive'],
+      relationshipTypes: ['Wedding Guest', 'Family Friend', 'Plus One'],
+      secretHints: [
+        'Weddings make them feel their own loneliness',
+        'Has a reputation for wedding hookups',
+        'Looking for their own happy ending',
+      ],
+    },
+    {
+      id: 'personal-trainer',
+      type: 'Personal Trainer',
+      traits: ['fit', 'encouraging', 'physically intimate', 'professional'],
+      relationshipTypes: ['Trainer', 'Coach', 'Fitness Instructor'],
+      secretHints: [
+        'Gets close to clients in ways that blur lines',
+        'Has crossed boundaries before',
+        'Clients develop feelings they mistake for attraction',
+      ],
+    },
+    {
+      id: 'business-trip-companion',
+      type: 'Business Trip Companion',
+      traits: ['far from home', 'understanding', 'discreet', 'opportunistic'],
+      relationshipTypes: ['Travel Colleague', 'Client', 'Business Contact'],
+      secretHints: [
+        'Has done this before',
+        'Knows how to keep secrets',
+        'Looking for no-strings connection',
+      ],
+    },
+
+    // === SUSPICIOUS/BETRAYED PARTNER ARCHETYPES (6) ===
+    {
       id: 'suspicious-spouse',
       type: 'Suspicious Spouse',
       traits: ['paranoid', 'hurt', 'controlling', 'desperate'],
-      relationshipTypes: ['Spouse', 'Partner', 'Ex'],
+      relationshipTypes: ['Spouse', 'Partner', 'Long-term Partner'],
       secretHints: [
         'Has evidence they have not revealed yet',
         'Has their own secrets to hide',
         'Would do anything to save the relationship',
       ],
     },
+    {
+      id: 'hurt-partner',
+      type: 'Hurt Partner',
+      traits: ['wounded', 'withdrawn', 'struggling', 'passive-aggressive'],
+      relationshipTypes: ['Spouse', 'Partner', 'Long-term Partner'],
+      secretHints: [
+        'Knows more than they let on',
+        'Waiting for the player to confess',
+        'Considering their options',
+      ],
+    },
+    {
+      id: 'evidence-finder',
+      type: 'The One Who Found Evidence',
+      traits: ['shocked', 'processing', 'calculating', 'torn'],
+      relationshipTypes: ['Spouse', 'Partner', 'Fiance'],
+      secretHints: [
+        'Hasn\'t decided what to do yet',
+        'Documenting everything',
+        'Consulting lawyers or friends secretly',
+      ],
+    },
+    {
+      id: 'gaslighted-partner',
+      type: 'Gaslighted Partner',
+      traits: ['confused', 'doubting themselves', 'desperate to believe', 'deteriorating'],
+      relationshipTypes: ['Spouse', 'Partner', 'Victim'],
+      secretHints: [
+        'Starting to trust their instincts',
+        'Someone is helping them see the truth',
+        'Breaking point approaching',
+      ],
+    },
+    {
+      id: 'partner-in-denial',
+      type: 'Partner in Denial',
+      traits: ['willfully blind', 'overcompensating', 'fragile', 'performative'],
+      relationshipTypes: ['Spouse', 'Partner', 'Fiance'],
+      secretHints: [
+        'Knows deep down but can\'t face it',
+        'Invested too much to walk away',
+        'Waiting for undeniable proof',
+      ],
+    },
+    {
+      id: 'planning-exit-partner',
+      type: 'Partner Planning Exit',
+      traits: ['calm', 'detached', 'strategic', 'secretly grieving'],
+      relationshipTypes: ['Spouse', 'Partner', 'Soon-to-be Ex'],
+      secretHints: [
+        'Already talking to lawyers',
+        'Moving money quietly',
+        'Waiting for the right moment',
+      ],
+    },
+
+    // === MANIPULATOR ARCHETYPES (8) ===
     {
       id: 'dangerous-ally',
       type: 'Dangerous Ally',
@@ -1407,6 +1876,85 @@ export const NPC_ARCHETYPE_POOLS: Record<ContentRating, NPCArchetype[]> = {
       ],
     },
     {
+      id: 'blackmailer',
+      type: 'The Blackmailer',
+      traits: ['patient', 'opportunistic', 'greedy', 'calculating'],
+      relationshipTypes: ['Former Employee', 'Witness', 'Acquaintance'],
+      secretHints: [
+        'Has evidence of something damaging',
+        'Testing how much they can extract',
+        'Has other targets too',
+      ],
+    },
+    {
+      id: 'gaslighter',
+      type: 'The Gaslighter',
+      traits: ['charming', 'manipulative', 'denial expert', 'makes others doubt reality'],
+      relationshipTypes: ['Partner', 'Colleague', 'Friend'],
+      secretHints: [
+        'Has done this to others before',
+        'Believes their own lies sometimes',
+        'Will never admit fault',
+      ],
+    },
+    {
+      id: 'two-faced-friend',
+      type: 'Two-Faced Friend',
+      traits: ['supportive to face', 'undermining behind back', 'jealous', 'competitive'],
+      relationshipTypes: ['Friend', 'Colleague', 'Neighbor'],
+      secretHints: [
+        'Sabotaging the player\'s relationships',
+        'Spreading rumors while playing innocent',
+        'Wants what the player has',
+      ],
+    },
+    {
+      id: 'corporate-saboteur',
+      type: 'Corporate Saboteur',
+      traits: ['professional', 'ambitious', 'ruthless', 'well-connected'],
+      relationshipTypes: ['Colleague', 'Competitor', 'Industry Contact'],
+      secretHints: [
+        'Being paid or incentivized to undermine',
+        'Has connections to the player\'s enemies',
+        'Playing a long game',
+      ],
+    },
+    {
+      id: 'charming-liar',
+      type: 'Charming Liar',
+      traits: ['charismatic', 'believable', 'pathological', 'always has an excuse'],
+      relationshipTypes: ['Friend', 'Partner', 'Colleague'],
+      secretHints: [
+        'Their whole backstory is fabricated',
+        'Has left a trail of burned bridges',
+        'Believes their own lies',
+      ],
+    },
+    {
+      id: 'the-user',
+      type: 'The User',
+      traits: ['needy', 'grateful', 'always in crisis', 'never reciprocating'],
+      relationshipTypes: ['Friend', 'Relative', 'Colleague'],
+      secretHints: [
+        'Every crisis is manufactured or exaggerated',
+        'Has burned through other helpers',
+        'Takes advantage of kindness deliberately',
+      ],
+    },
+    {
+      id: 'information-broker',
+      type: 'Information Broker',
+      traits: ['connected', 'neutral', 'transactional', 'dangerous to cross'],
+      relationshipTypes: ['Acquaintance', 'Fixer', 'Contact'],
+      secretHints: [
+        'Knows secrets about everyone',
+        'Will sell information to the highest bidder',
+        'Has leverage on powerful people',
+      ],
+    },
+
+    // === PAST CONNECTIONS (6) ===
+    {
       id: 'ghost-from-past',
       type: 'Ghost from the Past',
       traits: ['knowing', 'bitter', 'transformed', 'dangerous'],
@@ -1415,6 +1963,50 @@ export const NPC_ARCHETYPE_POOLS: Record<ContentRating, NPCArchetype[]> = {
         'Came back for a reason',
         'Knows things nobody else knows',
         'Has their own revenge agenda',
+      ],
+    },
+    {
+      id: 'bitter-ex',
+      type: 'Bitter Ex',
+      traits: ['resentful', 'vocal', 'destructive', 'unable to move on'],
+      relationshipTypes: ['Ex-Spouse', 'Ex-Partner', 'Former Lover'],
+      secretHints: [
+        'Still in love underneath the anger',
+        'Would rather destroy than let go',
+        'Has been telling others damaging things',
+      ],
+    },
+    {
+      id: 'childhood-sweetheart',
+      type: 'Childhood Sweetheart',
+      traits: ['nostalgic', 'idealized', 'unchanged in some ways', 'represents road not taken'],
+      relationshipTypes: ['First Love', 'High School Sweetheart', 'Hometown Flame'],
+      secretHints: [
+        'Never fully got over the player',
+        'Life didn\'t turn out as planned',
+        'Reconnecting awakens old feelings',
+      ],
+    },
+    {
+      id: 'former-best-friend',
+      type: 'Former Best Friend',
+      traits: ['knowing', 'complicated', 'carrying old wounds', 'potential ally or enemy'],
+      relationshipTypes: ['Former Best Friend', 'Estranged Friend', 'Old Confidant'],
+      secretHints: [
+        'The falling out was never resolved',
+        'Knows the player\'s deepest secrets',
+        'Has changed in unexpected ways',
+      ],
+    },
+    {
+      id: 'old-flames-new-spouse',
+      type: 'Old Flame\'s New Spouse',
+      traits: ['curious', 'competitive', 'insecure', 'watchful'],
+      relationshipTypes: ['Ex\'s Current Partner', 'New Spouse of Former Lover'],
+      secretHints: [
+        'Sees the player as a threat',
+        'Knows their partner isn\'t fully over it',
+        'Looking for reasons to be suspicious',
       ],
     },
     {
@@ -1428,22 +2020,470 @@ export const NPC_ARCHETYPE_POOLS: Record<ContentRating, NPCArchetype[]> = {
         'Will use any leverage they can find',
       ],
     },
+
+    // === POWER DYNAMICS (5) ===
+    {
+      id: 'boss-with-leverage',
+      type: 'Boss with Leverage',
+      traits: ['powerful', 'knowing', 'demanding', 'holding something over the player'],
+      relationshipTypes: ['Boss', 'Supervisor', 'Board Member'],
+      secretHints: [
+        'Knows about something the player wants hidden',
+        'Using professional power for personal gain',
+        'Has destroyed others who didn\'t comply',
+      ],
+    },
+    {
+      id: 'wealthy-benefactor',
+      type: 'Wealthy Benefactor',
+      traits: ['generous', 'strings-attached', 'entitled', 'controlling'],
+      relationshipTypes: ['Investor', 'Family Benefactor', 'Wealthy Friend'],
+      secretHints: [
+        'Expects things in return for generosity',
+        'Has bought loyalty before',
+        'Money comes with expectations',
+      ],
+    },
+    {
+      id: 'influential-connection',
+      type: 'Influential Connection',
+      traits: ['connected', 'powerful', 'transactional', 'dangerous'],
+      relationshipTypes: ['Political Contact', 'Industry Leader', 'Power Broker'],
+      secretHints: [
+        'Can open doors or close them',
+        'Favors always come due',
+        'Has ruined others who disappointed them',
+      ],
+    },
+    {
+      id: 'person-who-owes-you',
+      type: 'Person Who Owes You',
+      traits: ['indebted', 'resentful', 'obligated', 'looking for exit'],
+      relationshipTypes: ['Former Colleague', 'Friend', 'Family Member'],
+      secretHints: [
+        'Hates being in debt to the player',
+        'Looking for ways to even the score',
+        'Might flip if given the chance',
+      ],
+    },
+    {
+      id: 'silent-witness',
+      type: 'Silent Witness',
+      traits: ['observant', 'quiet', 'overlooked', 'knows more than they should'],
+      relationshipTypes: ['Assistant', 'Service Worker', 'Neighbor'],
+      secretHints: [
+        'Has seen things they shouldn\'t have',
+        'Could help or harm with what they know',
+        'Waiting to see how to use the information',
+      ],
+    },
   ],
 
+  // ============================================================================
+  // UNFILTERED (Crazy) - Based on adult content trends research
+  // Obsession, cheating fantasies, exploration, taboo, roleplay
+  // ============================================================================
   'unfiltered': [
+    // === OBSESSION ARCHETYPES (6) ===
+    {
+      id: 'obsessed-lover',
+      type: 'Obsessed Lover',
+      traits: ['possessive', 'intense', 'tracking', 'will not let go'],
+      relationshipTypes: ['Lover', 'Affair Partner', 'Ex Who Won\'t Move On'],
+      secretHints: [
+        'Has been following the player\'s movements',
+        'Keeps mementos and records everything',
+        'Would rather destroy than lose them',
+      ],
+    },
+    {
+      id: 'possessive-ex',
+      type: 'Possessive Ex',
+      traits: ['jealous', 'stalking', 'unable to accept it\'s over', 'dangerous'],
+      relationshipTypes: ['Ex-Partner', 'Ex-Spouse', 'Former Lover'],
+      secretHints: [
+        'Still considers the player theirs',
+        'Sabotaging new relationships',
+        'Escalating behavior over time',
+      ],
+    },
+    {
+      id: 'secret-admirer-gone-wrong',
+      type: 'Secret Admirer Gone Wrong',
+      traits: ['hidden', 'fixated', 'building fantasies', 'delusional'],
+      relationshipTypes: ['Coworker', 'Neighbor', 'Acquaintance'],
+      secretHints: [
+        'Has been watching for longer than anyone knows',
+        'Built an entire fantasy relationship in their head',
+        'Believes the player is sending them signals',
+      ],
+    },
+    {
+      id: 'stalker-fan',
+      type: 'Stalker Fan',
+      traits: ['devoted', 'unhinged', 'knows too much', 'feels entitled'],
+      relationshipTypes: ['Fan', 'Follower', 'Online Admirer'],
+      secretHints: [
+        'Knows the player\'s schedule and routines',
+        'Believes they have a special connection',
+        'Will not take no for an answer',
+      ],
+    },
+    {
+      id: 'jealous-collector',
+      type: 'Jealous Collector',
+      traits: ['wealthy', 'entitled', 'treats people as possessions', 'competitive'],
+      relationshipTypes: ['Wealthy Suitor', 'Patron', 'Benefactor'],
+      secretHints: [
+        'Has "collected" others before',
+        'Doesn\'t handle rejection well',
+        'Will buy or destroy what they want',
+      ],
+    },
     {
       id: 'toxic-lover',
       type: 'Toxic Lover',
-      traits: ['intoxicating', 'destructive', 'possessive', 'addictive'],
+      traits: ['intoxicating', 'destructive', 'addictive', 'using sex as control'],
       relationshipTypes: ['Lover', 'Ex', 'Affair', 'Obsession'],
       secretHints: [
-        'Uses sex as a weapon and reward',
+        'Uses intimacy as a weapon and reward',
         'Has destroyed others before the player',
         'Will not let go without consequences',
       ],
     },
+
+    // === CHEATING/CUCKOLD FANTASY ARCHETYPES (8) - Based on research trends ===
     {
-      id: 'blackmailer',
+      id: 'hotwife-hothusband',
+      type: 'Hotwife/Hot Husband',
+      traits: ['adventurous', 'open', 'confident', 'exploring boundaries'],
+      relationshipTypes: ['Spouse', 'Partner', 'Open Marriage Partner'],
+      secretHints: [
+        'Wants permission to explore outside marriage',
+        'Has fantasies about being watched',
+        'Testing if partner is open-minded',
+      ],
+    },
+    {
+      id: 'willing-cuckold',
+      type: 'The Willing Cuckold',
+      traits: ['submissive', 'aroused by jealousy', 'devoted', 'complex desires'],
+      relationshipTypes: ['Spouse', 'Partner', 'Long-term Partner'],
+      secretHints: [
+        'Gets aroused by partner being with others',
+        'Wants to watch or hear about it',
+        'Shame mixed with intense desire',
+      ],
+    },
+    {
+      id: 'homewrecker',
+      type: 'The Homewrecker',
+      traits: ['predatory', 'targeting married people', 'thrilled by forbidden', 'no remorse'],
+      relationshipTypes: ['Affair Partner', 'Seducer', 'Other Woman/Man'],
+      secretHints: [
+        'Specifically targets people in relationships',
+        'Gets off on the forbidden nature',
+        'Has broken up marriages before',
+      ],
+    },
+    {
+      id: 'office-affair',
+      type: 'Office Affair',
+      traits: ['risky', 'intense', 'hiding in plain sight', 'professional by day'],
+      relationshipTypes: ['Coworker', 'Boss', 'Employee', 'Client'],
+      secretHints: [
+        'The thrill of getting caught adds excitement',
+        'Has been noticed by others',
+        'Power dynamics make it complicated',
+      ],
+    },
+    {
+      id: 'cheating-spouse',
+      type: 'Cheating Spouse',
+      traits: ['guilty', 'addicted to thrill', 'compartmentalizing', 'risking everything'],
+      relationshipTypes: ['Spouse', 'Partner', 'Married Lover'],
+      secretHints: [
+        'Can\'t stop despite the risks',
+        'Living a double life',
+        'Close calls only add to excitement',
+      ],
+    },
+    {
+      id: 'the-bull',
+      type: 'The Bull/Vixen',
+      traits: ['dominant', 'confident', 'sexually powerful', 'takes what they want'],
+      relationshipTypes: ['Affair Partner', 'Third Party', 'Dominant Lover'],
+      secretHints: [
+        'Has done this with other couples',
+        'Enjoys the power dynamic',
+        'Knows exactly what they\'re doing',
+      ],
+    },
+    {
+      id: 'swinger-contact',
+      type: 'Swinger Contact',
+      traits: ['experienced', 'open-minded', 'discreet', 'community connected'],
+      relationshipTypes: ['Lifestyle Contact', 'Club Connection', 'Open Couple'],
+      secretHints: [
+        'Part of a larger community',
+        'Has seen and done everything',
+        'Knows how to keep secrets',
+      ],
+    },
+    {
+      id: 'caught-cheater',
+      type: 'The Caught Cheater',
+      traits: ['exposed', 'desperate', 'bargaining', 'will do anything'],
+      relationshipTypes: ['Spouse', 'Partner', 'Exposed Affair'],
+      secretHints: [
+        'Evidence is out there',
+        'Willing to make deals to keep it quiet',
+        'More secrets than just the affair',
+      ],
+    },
+
+    // === LGBTQ+ EXPLORATION ARCHETYPES (6) - Based on research trends ===
+    {
+      id: 'bicurious-friend',
+      type: 'Bicurious Friend',
+      traits: ['questioning', 'attracted', 'nervous', 'wanting to experiment'],
+      relationshipTypes: ['Friend', 'Colleague', 'Gym Buddy'],
+      secretHints: [
+        'Has been having thoughts they can\'t explain',
+        'Attracted to the player specifically',
+        'Looking for a safe person to explore with',
+      ],
+    },
+    {
+      id: 'closeted-colleague',
+      type: 'Closeted Colleague',
+      traits: ['hiding', 'careful', 'intense when private', 'compartmentalized'],
+      relationshipTypes: ['Coworker', 'Professional Contact', 'Business Partner'],
+      secretHints: [
+        'Living a double life',
+        'Can\'t be out due to career/family',
+        'Looking for discreet connection',
+      ],
+    },
+    {
+      id: 'first-experiment',
+      type: 'First Experiment',
+      traits: ['curious', 'inexperienced', 'excited', 'vulnerable'],
+      relationshipTypes: ['New Connection', 'App Match', 'Interested Party'],
+      secretHints: [
+        'Never done this before',
+        'Might catch feelings',
+        'Processing their identity',
+      ],
+    },
+    {
+      id: 'openly-fluid',
+      type: 'Openly Fluid',
+      traits: ['confident', 'experienced', 'non-judgmental', 'guide potential'],
+      relationshipTypes: ['Friend', 'Mentor', 'Experienced Partner'],
+      secretHints: [
+        'Has helped others explore before',
+        'Knows the community',
+        'Attracted to the curious',
+      ],
+    },
+    {
+      id: 'questioning-spouse',
+      type: 'Questioning Spouse',
+      traits: ['confused', 'suppressed desires', 'married but unfulfilled', 'scared'],
+      relationshipTypes: ['Spouse', 'Partner', 'Married Friend'],
+      secretHints: [
+        'Married the "right" person but wrong gender',
+        'Desires they\'ve pushed down for years',
+        'Reaching a breaking point',
+      ],
+    },
+    {
+      id: 'lgbtq-awakening',
+      type: 'LGBTQ+ Awakening',
+      traits: ['late bloomer', 'intense feelings', 'life-changing realization', 'passionate'],
+      relationshipTypes: ['New Interest', 'Catalyst Person', 'Awakening'],
+      secretHints: [
+        'Everything suddenly makes sense',
+        'Willing to risk everything for authenticity',
+        'Intense because it\'s new and true',
+      ],
+    },
+
+    // === MATURE/MILF/DILF ARCHETYPES (6) - Based on research trends ===
+    {
+      id: 'experienced-seducer',
+      type: 'Experienced Seducer',
+      traits: ['confident', 'knows what they want', 'skilled', 'selective'],
+      relationshipTypes: ['Older Lover', 'Mentor Figure', 'Sophisticated Interest'],
+      secretHints: [
+        'Has done this many times before',
+        'Knows exactly how to get what they want',
+        'Looking for someone worth their time',
+      ],
+    },
+    {
+      id: 'cougar-silver-fox',
+      type: 'Cougar/Silver Fox',
+      traits: ['attractive older', 'confident', 'financially stable', 'seeking youth'],
+      relationshipTypes: ['Older Love Interest', 'Wealthy Older', 'Distinguished Admirer'],
+      secretHints: [
+        'Attracted to younger energy',
+        'Can offer things others can\'t',
+        'Looking for excitement, not commitment',
+      ],
+    },
+    {
+      id: 'sugar-parent',
+      type: 'Sugar Parent',
+      traits: ['wealthy', 'generous', 'expects arrangement', 'transactional'],
+      relationshipTypes: ['Benefactor', 'Wealthy Patron', 'Arrangement Partner'],
+      secretHints: [
+        'Exchanges money/gifts for companionship or more',
+        'Has done this before with others',
+        'Clear about expectations',
+      ],
+    },
+    {
+      id: 'neighbor-milf-dilf',
+      type: 'Attractive Neighbor (MILF/DILF)',
+      traits: ['next door', 'unavailable but interested', 'domestic but desires', 'convenient'],
+      relationshipTypes: ['Neighbor', 'Parent at School', 'Local Married Person'],
+      secretHints: [
+        'Marriage is unfulfilling',
+        'Has been watching the player',
+        'Proximity makes it convenient and dangerous',
+      ],
+    },
+    {
+      id: 'friends-hot-parent',
+      type: 'Friend\'s Attractive Parent',
+      traits: ['forbidden', 'attractive', 'experienced', 'taboo'],
+      relationshipTypes: ['Friend\'s Mother', 'Friend\'s Father', 'Parent Figure'],
+      secretHints: [
+        'The attraction is mutual and obvious',
+        'Has thought about it more than appropriate',
+        'Ultimate forbidden fantasy',
+      ],
+    },
+    {
+      id: 'gilf-experience',
+      type: 'GILF Experience',
+      traits: ['much older', 'experienced', 'no inhibitions', 'surprising'],
+      relationshipTypes: ['Older Admirer', 'Experienced Elder', 'Unexpected Connection'],
+      secretHints: [
+        'Age has removed all inhibitions',
+        'Knows things younger people don\'t',
+        'Looking for passion, not games',
+      ],
+    },
+
+    // === ROLEPLAY PROFESSION ARCHETYPES (6) - Based on research trends ===
+    {
+      id: 'boss-crosses-lines',
+      type: 'Boss Who Crosses Lines',
+      traits: ['powerful', 'inappropriate', 'using position', 'entitled'],
+      relationshipTypes: ['Boss', 'CEO', 'Executive', 'Manager'],
+      secretHints: [
+        'Uses power for personal gratification',
+        'Has done this before with others',
+        'Rewards compliance, punishes rejection',
+      ],
+    },
+    {
+      id: 'seductive-employee',
+      type: 'Seductive Employee',
+      traits: ['ambitious', 'using attraction', 'willing to trade', 'calculating'],
+      relationshipTypes: ['Employee', 'Assistant', 'Subordinate'],
+      secretHints: [
+        'Knows their attractiveness is an asset',
+        'Willing to use it to advance',
+        'More strategic than they appear',
+      ],
+    },
+    {
+      id: 'professor-favorites',
+      type: 'Professor with Favorites',
+      traits: ['intellectual', 'power dynamic', 'mentorship blur', 'inappropriate'],
+      relationshipTypes: ['Professor', 'Teacher', 'Academic Mentor'],
+      secretHints: [
+        'Has had relationships with students before',
+        'Uses grades or opportunities as leverage',
+        'Believes it\'s mutual attraction',
+      ],
+    },
+    {
+      id: 'personal-driver',
+      type: 'Personal Driver',
+      traits: ['service role', 'sees everything', 'discreet', 'available'],
+      relationshipTypes: ['Driver', 'Chauffeur', 'Personal Staff'],
+      secretHints: [
+        'Knows all the secrets from backseat conversations',
+        'Available at intimate hours',
+        'The help has needs too',
+      ],
+    },
+    {
+      id: 'service-worker-fantasy',
+      type: 'Service Worker Fantasy',
+      traits: ['in your home', 'physical work', 'service role', 'unexpected chemistry'],
+      relationshipTypes: ['Plumber', 'Pool Cleaner', 'Contractor', 'Delivery Person'],
+      secretHints: [
+        'Classic fantasy scenario come to life',
+        'The alone-in-house situation',
+        'Tips aren\'t the only payment',
+      ],
+    },
+    {
+      id: 'uniform-fetish',
+      type: 'Uniform Figure',
+      traits: ['authority figure', 'uniform appeal', 'power dynamic', 'accessible'],
+      relationshipTypes: ['Police Officer', 'Firefighter', 'Military', 'Security'],
+      secretHints: [
+        'The uniform adds to the attraction',
+        'Authority and physicality combined',
+        'Fantasy meets reality',
+      ],
+    },
+
+    // === TABOO/FORBIDDEN ARCHETYPES (3) ===
+    {
+      id: 'step-relationship',
+      type: 'Step-Relationship',
+      traits: ['not blood but family', 'forbidden', 'living together', 'tension'],
+      relationshipTypes: ['Step-Sibling', 'Step-Parent', 'Step-Child (adult)'],
+      secretHints: [
+        'The family dynamic makes it wrong but exciting',
+        'Started as innocent and escalated',
+        'Nobody can ever know',
+      ],
+    },
+    {
+      id: 'age-gap-fantasy',
+      type: 'Significant Age Gap',
+      traits: ['experience vs youth', 'power imbalance', 'different worlds', 'intense'],
+      relationshipTypes: ['Much Older Partner', 'Much Younger Interest', 'Generational Gap'],
+      secretHints: [
+        'The age difference is part of the appeal',
+        'Society would judge but they don\'t care',
+        'Different things to offer each other',
+      ],
+    },
+    {
+      id: 'power-imbalance',
+      type: 'Power Imbalance Fantasy',
+      traits: ['unequal power', 'dependency', 'control dynamics', 'complicated consent'],
+      relationshipTypes: ['Authority Figure', 'Dependent', 'Controller/Controlled'],
+      secretHints: [
+        'Power is part of the attraction',
+        'Lines between choice and pressure blur',
+        'The dynamic itself is the fantasy',
+      ],
+    },
+
+    // === ADDITIONAL DANGEROUS/CRIMINAL ARCHETYPES (5) ===
+    {
+      id: 'blackmailer-extreme',
       type: 'Blackmailer',
       traits: ['patient', 'cruel', 'thorough', 'enjoying control'],
       relationshipTypes: ['Former Employee', 'Witness', 'Investigator'],
@@ -1456,7 +2496,7 @@ export const NPC_ARCHETYPE_POOLS: Record<ContentRating, NPCArchetype[]> = {
     {
       id: 'corrupt-authority',
       type: 'Corrupt Authority',
-      traits: ['powerful', 'above the law', 'perverted', 'vengeful'],
+      traits: ['powerful', 'above the law', 'uses position', 'vengeful'],
       relationshipTypes: ['Boss', 'Official', 'Investor', 'Client'],
       secretHints: [
         'Uses position for personal gratification',
@@ -1478,12 +2518,23 @@ export const NPC_ARCHETYPE_POOLS: Record<ContentRating, NPCArchetype[]> = {
     {
       id: 'rival-predator',
       type: 'Rival Predator',
-      traits: ['competitive', 'ruthless', 'sexually aggressive', 'dominant'],
+      traits: ['competitive', 'ruthless', 'aggressive', 'dominant'],
       relationshipTypes: ['Competitor', 'Former Partner', 'Enemy'],
       secretHints: [
         'Wants to dominate the player in every way',
         'Will use seduction or destruction',
         'Sees this as a game they must win',
+      ],
+    },
+    {
+      id: 'criminal-connection',
+      type: 'Criminal Connection',
+      traits: ['dangerous', 'useful', 'violent potential', 'transactional'],
+      relationshipTypes: ['Dealer', 'Fixer', 'Criminal Associate'],
+      secretHints: [
+        'Can solve problems others can\'t',
+        'Everything has a price',
+        'Getting out is harder than getting in',
       ],
     },
   ],

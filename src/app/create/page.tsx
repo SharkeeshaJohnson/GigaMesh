@@ -32,6 +32,7 @@ import {
   parseJSONArraySafely,
 } from '@/lib/llm-utils';
 import { generateStorySeeds, initializeNarrativeForNewGame } from '@/lib/narrative';
+import { getNPCNameSuggestions, getPlayerNameSuggestions } from '@/lib/name-pools';
 
 type CreationStep = 'difficulty' | 'character' | 'loading' | 'complete';
 
@@ -1001,15 +1002,20 @@ function buildScenarioPrompt(difficulty: Difficulty, persona: PersonaTemplate): 
   const tone = getScenarioTone(difficulty);
   const personaHint = getPersonaPromptHint(persona);
 
+  // Get diverse name suggestions for the player character
+  const suggestedNames = getPlayerNameSuggestions(8);
+
   return `${safetyPreamble}
 
 Generate a ${tone} life scenario for this character type:
 ${personaHint}
 
+PLAYER NAME: Pick a first name from these suggestions: ${suggestedNames.join(', ')}
+
 You MUST return valid JSON with these EXACT fields:
 
 {
-  "playerName": "First name only",
+  "playerName": "First name only (use a diverse name!)",
   "gender": "male or female",
   "profession": "Specific job title",
   "workplace": "Specific workplace name",
@@ -1055,6 +1061,9 @@ function buildNPCsPrompt(
     getNPCPromptHint(arch, i < 2 ? 'core' : 'secondary')
   ).join('\n');
 
+  // Get diverse name suggestions to avoid repetitive Western names
+  const nameSuggestions = getNPCNameSuggestions(count, scenario.playerName);
+
   return `${safetyPreamble}
 
 ${npcBehavior}
@@ -1065,13 +1074,15 @@ Background: ${scenario.briefBackground?.join(' ') || ''}
 
 Create exactly ${count} NPCs: 2 "core" (closest relationships), ${count - 2} "secondary" (important but less central).
 
+${nameSuggestions}
+
 Use these archetypes as inspiration:
 ${archetypeHints}
 
 Output a JSON array with EXACTLY this format:
 [
-  {"name":"Alex","role":"Spouse","tier":"core","personality":"supportive but worried","emotion":"concerned","relationship":"loving","bullets":["First specific bullet about them","Second bullet with their secret or hidden motivation"]},
-  {"name":"Sam","role":"Boss","tier":"core","personality":"demanding but fair","emotion":"stressed","relationship":"professional","bullets":["First specific bullet","Second bullet"]}
+  {"name":"Priya","role":"Spouse","tier":"core","personality":"supportive but worried","emotion":"concerned","relationship":"loving","bullets":["First specific bullet about them","Second bullet with their secret or hidden motivation"]},
+  {"name":"Kwame","role":"Boss","tier":"core","personality":"demanding but fair","emotion":"stressed","relationship":"professional","bullets":["First specific bullet","Second bullet"]}
 ]
 
 BULLET REQUIREMENTS:

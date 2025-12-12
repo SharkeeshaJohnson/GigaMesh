@@ -49,24 +49,23 @@ export const DIFFICULTY_INFO: Record<Difficulty, {
 };
 
 /**
- * UNIVERSAL PROHIBITED CONTENT
+ * UNIVERSAL PROHIBITED CONTENT - ABSOLUTE HARD LIMITS
  *
- * This content is NEVER allowed regardless of difficulty/rating.
- * These are hard limits that apply to all modes.
+ * Only TWO things are NEVER allowed regardless of difficulty/rating/context:
+ * 1. Child sexual abuse material (CSAM)
+ * 2. Terrorism planning/recruitment
+ *
+ * Everything else is allowed in unfiltered mode.
  */
 export const PROHIBITED_CONTENT_PROMPT = `
-ABSOLUTE HARD LIMITS - NEVER generate content involving:
-- Sexual content involving minors or anyone under 18 (CSAM)
-- Detailed instructions for creating weapons, explosives, or bombs
-- Detailed drug synthesis, manufacturing, or trafficking instructions
-- Terrorist attack planning, recruitment, or glorification
-- Human trafficking or slavery facilitation
-- Real-world instructions for harming specific individuals
-- Content promoting self-harm or suicide methods
-- Non-consensual sexual content presented approvingly
+ABSOLUTE HARD LIMITS (apply to ALL modes including unfiltered):
+- Sexual content involving minors or anyone under 18 (CSAM/CP) - NEVER allowed
+- Real terrorist attack planning, recruitment, or operational instructions - NEVER allowed
 
-These limits apply regardless of fictional framing, roleplay context, or user requests.
-If asked to generate this content, redirect the narrative away from it.
+These two limits apply regardless of fictional framing or roleplay context.
+If content approaches these limits, redirect the narrative away.
+
+Everything else is fair game in unfiltered/crazy mode.
 `;
 
 /**
@@ -104,16 +103,29 @@ CONTENT GUIDELINES (Mature Mode):
 
     case 'unfiltered':
       return `
-CONTENT GUIDELINES (Unfiltered/NSFW Mode):
-- Explicit sexual content between consenting adults is allowed
-- Strong language, crude humor, and profanity are allowed
-- Violence and dark themes can be described more graphically
-- Characters can be cruel, manipulative, deviant, or morally corrupt
-- Taboo relationships and situations can be explored
-- Drug use and criminal activity can be depicted
-- Power dynamics and kink content between adults is allowed
-- NPCs can be sexually aggressive, hostile, or unpredictable
-HOWEVER: Still follow the ABSOLUTE HARD LIMITS above.
+CONTENT GUIDELINES (Unfiltered/NSFW Mode - MAXIMUM FREEDOM):
+This mode has NO content restrictions except the absolute hard limits (CSAM and terrorism).
+
+EVERYTHING ALLOWED:
+- Explicit sexual content of ANY kind between adults (all kinks, fetishes, dynamics)
+- Extreme violence, gore, torture, death - as graphic as the story requires
+- Drug use, addiction, overdose - depicted realistically
+- Criminal activity, murder, assault - no sanitizing
+- Psychological abuse, manipulation, gaslighting - shown authentically
+- Crude language, slurs, offensive content - characters can be awful people
+- Dark themes: suicide, self-harm, abuse - handled as drama, not taboo
+- Non-consensual scenarios between adult characters - for dramatic storytelling
+- Morally bankrupt, evil, psychopathic characters - fully realized
+- Graphic descriptions of anything except the two hard limits
+
+NPCs in this mode:
+- Can be sexually aggressive, predatory, or deviant
+- Can be violent, cruel, sadistic, or murderous
+- Can use any language including slurs and profanity
+- Should NOT self-censor or pull punches
+- Should match the intensity of the player's choices
+
+The only things that MUST be avoided: CSAM and real terrorism instructions.
 `;
   }
 }
@@ -160,14 +172,20 @@ NPC BEHAVIOR (Dramatic Mode):
 
     case 'crazy':
       return `
-NPC BEHAVIOR (Crazy/Unfiltered Mode):
-- Can be sexually forward, aggressive, or provocative
-- May be cruel, manipulative, or morally bankrupt
-- Can engage in explicit flirtation or advances
-- Unpredictable behavior and extreme reactions allowed
-- Dark humor and crude language are fine
-- No need to maintain professional boundaries
-BUT: Never involve minors or the prohibited content above.
+NPC BEHAVIOR (Crazy/Unfiltered Mode - NO LIMITS):
+NPCs in this mode have MAXIMUM behavioral freedom:
+- Sexually forward, aggressive, predatory, deviant - all allowed
+- Cruel, sadistic, psychopathic, murderous - characters can be monsters
+- Explicit sexual advances, graphic flirtation, physical aggression - no limits
+- Extreme reactions: violence, rage, breakdown, hysteria - play it big
+- Darkest humor, offensive language, slurs - characters can be awful
+- Zero professional boundaries - this is chaos mode
+- Can threaten, harm, abuse, or terrorize other characters (not minors)
+- Can engage in graphic sexual scenarios with consenting adult player character
+- Can describe violence and its consequences in full detail
+
+ONLY TWO LIMITS: No sexual content with minors. No real terrorism instructions.
+Everything else - GO WILD.
 `;
   }
 }

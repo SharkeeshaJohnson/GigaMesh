@@ -1,14 +1,15 @@
 // Image Generation Model Configuration for LifeSim
 
 export const IMAGE_MODEL_CONFIG = {
-  // Primary image generation model - FLUX Schnell for fast pixel art generation
-  characterGeneration: "fireworks/accounts/fireworks/models/flux-1-schnell-fp8",
+  // Primary image generation model - OpenAI DALL-E 3 via portal API
+  // Note: openai-gpt-image-1 was returning 500 errors, using dall-e-3 as fallback
+  characterGeneration: "openai-dall-e-3",
 
   // Scene/background generation
-  sceneGeneration: "fireworks/accounts/fireworks/models/flux-1-schnell-fp8",
+  sceneGeneration: "openai-dall-e-3",
 
   // Quick emotion sprite variants
-  emotionSprite: "fireworks/accounts/fireworks/models/flux-1-schnell-fp8",
+  emotionSprite: "openai-dall-e-3",
 };
 
 // Image generation settings

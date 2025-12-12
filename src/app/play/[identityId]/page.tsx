@@ -6,21 +6,13 @@ import { useEffect, useState, useRef } from 'react';
 import { Identity, NPC, Action, Message, Conversation, SimulationResult } from '@/lib/types';
 import { getFromIndexedDB, saveToIndexedDB, getQueuedActions, getConversationsForNPC, getSimulationsForIdentity } from '@/lib/indexeddb';
 import { useChat, useMemory, useModels } from '@/lib/reverbia';
-import { MODEL_CONFIG, getModelForNPCTier, getModelForNPC, filterAvailableModels, assignModelsToNPCs } from '@/lib/models';
+import { getModelForNPC, filterAvailableModels } from '@/lib/models';
 import { parseImageTags, inferImageType, generateCharacterConsistentImage } from '@/lib/image-generation';
-import { cacheChatImage, getCachedChatImage, getBreathingAnimationFrames, hasBreathingAnimation } from '@/lib/sprite-cache';
+import { cacheChatImage, getCachedChatImage, getBreathingAnimationFrames } from '@/lib/sprite-cache';
 import {
-  selectRevelationForNPC,
-  buildRevelationPrompt,
   detectAndMarkRevelation,
   generateStorySeeds,
   StorySeed,
-  RevelationOptions,
-  createNPCActionFact,
-  addWorldFact,
-  getGroupChatRevelations,
-  propagateKnowledge,
-  NarrativeState,
 } from '@/lib/narrative';
 
 // Persona to sprite mapping for migration (matches create page CHARACTER_SPRITES)
@@ -241,7 +233,7 @@ export default function GamePage() {
     },
   });
 
-  const { searchMemories } = useMemory();
+  const { searchMemories, extractMemoriesFromMessage } = useMemory(); // Memory functions from Reverbia SDK
 
   // Debug: List available models
   const { models } = useModels();
@@ -254,10 +246,17 @@ export default function GamePage() {
         m.id?.toLowerCase().includes('image') ||
         m.id?.toLowerCase().includes('flux') ||
         m.id?.toLowerCase().includes('dall') ||
-        m.id?.toLowerCase().includes('stable')
+        m.id?.toLowerCase().includes('stable') ||
+        m.id?.toLowerCase().includes('gpt-image') ||
+        m.id?.toLowerCase().includes('openai')
       );
       if (imageModels.length > 0) {
-        console.log('[IMAGE GENERATION MODELS]:', imageModels.map((m: any) => JSON.stringify({ id: m.id, methods: m.supported_methods })));
+        console.log('[IMAGE GENERATION MODELS]:', imageModels.map((m: any) => JSON.stringify({ id: m.id, name: m.name, methods: m.supported_methods })));
+      } else {
+        console.log('[IMAGE GENERATION MODELS]: None found. Checking all models for image capability...');
+        // Log ALL models with their supported methods to find image generation
+        const modelsWithMethods = models.filter((m: any) => m.supported_methods);
+        console.log('[Models with supported_methods]:', modelsWithMethods.map((m: any) => ({ id: m.id, methods: m.supported_methods })));
       }
       // Find Dobby models
       const dobbyModels = models.filter((m: any) =>
@@ -621,6 +620,17 @@ export default function GamePage() {
     const lastMessage = messages[messages.length - 1];
     if (!lastMessage) return;
 
+    // CRITICAL: Check if the last NPC message directly addresses the player
+    // If so, pause BEFORE scheduling another NPC response
+    if (lastMessage.role === 'assistant' && identity) {
+      const addressesPlayer = isPlayerDirectlyAddressed(lastMessage.content, identity.name);
+      if (addressesPlayer) {
+        console.log(`[Auto-Chat] Pausing - ${lastMessage.npcName} directly addressed ${identity.name}`);
+        setAutoChatPausedForPlayer(true);
+        return; // Don't schedule another NPC, wait for player
+      }
+    }
+
     // Pick a random NPC who isn't the one who just spoke (or the user)
     const eligibleNpcs = availableNpcs.filter(n => n.id !== lastMessage.npcId);
     if (eligibleNpcs.length === 0) return;
@@ -854,20 +864,44 @@ End on a cliffhanger or dramatic note.`;
         }
       }
 
-      // Build system prompt with all options
-      const promptOptions = {
-        isAutoChat,
-        autoChatMessageCount: autoChatCount,
-        shouldAskPlayerQuestion,
-      };
-      const systemPrompt = buildGroupChatPrompt(npc, identity, recentMessages, simulationHistory, revelationState, conversationNpcIds, promptOptions) + autoChatDirective;
-
       // Get model for this NPC (uses assigned model for variety, falls back to tier-based)
       const model = getModelForNPC(npc);
       console.log(`[NPC Model] ${npc.name} using: ${model.split('/').pop()}`);
 
-      // Search for relevant memories (skip to reduce latency/tokens)
-      const relevantMemories: string[] = [];
+      // MEMORY SYSTEM: Search for relevant memories from past conversations
+      // This gives NPCs continuity - they remember what they've talked about with the player
+      let relevantMemories: string[] = [];
+      try {
+        // Get the last message to use as search query
+        const lastUserMsg = recentMessages.filter(m => m.role === 'user').pop();
+        const searchQuery = lastUserMsg?.content || `conversation with ${identity.name}`;
+
+        // Search for memories related to this NPC and player
+        // SDK signature: searchMemories(query: string, limit?: number, minSimilarity?: number)
+        const queryString = `${npc.name} ${identity.name} ${searchQuery}`;
+        console.log(`[Memory Search] Searching for: "${queryString.substring(0, 50)}..."`);
+        const memoryResults = await searchMemories(queryString, 5, 0.5);
+
+        if (memoryResults && Array.isArray(memoryResults) && memoryResults.length > 0) {
+          relevantMemories = memoryResults
+            .map((m: any) => m.content || m.text || m.memory)
+            .filter(Boolean)
+            .slice(0, 3); // Max 3 memories to keep prompt short
+          console.log(`[Memory] Found ${relevantMemories.length} memories for ${npc.name}`);
+        }
+      } catch (err) {
+        // Memory search is optional - don't fail the whole request
+        console.log(`[Memory] Search unavailable for ${npc.name}:`, err);
+      }
+
+      // Build system prompt with all options including memories
+      const promptOptions = {
+        isAutoChat,
+        autoChatMessageCount: autoChatCount,
+        shouldAskPlayerQuestion,
+        memories: relevantMemories,
+      };
+      const systemPrompt = buildGroupChatPrompt(npc, identity, recentMessages, simulationHistory, revelationState, conversationNpcIds, promptOptions) + autoChatDirective;
 
       // Build messages for API - CRITICAL: Only mark messages as 'assistant' if from THIS NPC
       // Other NPCs' messages should be 'user' role to avoid confusing the model
@@ -995,6 +1029,31 @@ End on a cliffhanger or dramatic note.`;
 
       // Add message immediately (possibly with loading state for image)
       setMessages((prev) => [...prev, npcMessage]);
+
+      // MEMORY SYSTEM: Extract memories from the conversation
+      // This allows NPCs to remember past conversations with the player
+      if (extractMemoriesFromMessage && assistantContent && assistantContent.length > 20) {
+        try {
+          // Get the last user message to pair with the NPC response
+          const lastUserMsg = recentMessages.filter(m => m.role === 'user').pop();
+
+          // Build messages array for memory extraction
+          const conversationToExtract = [
+            ...(lastUserMsg ? [{ role: 'user', content: lastUserMsg.content || '' }] : []),
+            { role: 'assistant', content: assistantContent },
+          ];
+
+          // Extract memories using the SDK's semantic extraction
+          await extractMemoriesFromMessage({
+            messages: conversationToExtract,
+            model: 'fireworks/accounts/fireworks/models/qwen3-8b', // Use fast model for extraction
+          });
+          console.log(`[Memory] Extracted memories from ${npc.name}'s response`);
+        } catch (err) {
+          // Memory extraction is optional - don't fail the whole request
+          console.log(`[Memory] Extraction unavailable:`, err);
+        }
+      }
 
       // NARRATIVE ENGINE: Track revelations after NPC response
       // This detects if the NPC revealed a story seed and updates tracking
@@ -2857,115 +2916,341 @@ function inferNPCRelationship(npc1: NPC, npc2: NPC): string {
   return 'acquaintances through ' + npc1.name;
 }
 
-// Generate conversation goals and topics for an NPC
-function generateConversationContext(
-  currentNpc: NPC,
-  otherNpcs: NPC[],
-  identity: Identity,
-  simulationHistory: SimulationResult[],
-  messageCount: number
-): string {
-  const parts: string[] = [];
+// ═══════════════════════════════════════════════════════════════════════════════
+// SPEAKING STYLE GENERATOR - Creates unique voice for each NPC based on their data
+// ═══════════════════════════════════════════════════════════════════════════════
 
-  // What this NPC knows about others present
-  const otherNpcInfo = otherNpcs.slice(0, 3).map(other => {
-    const relationship = inferNPCRelationship(currentNpc, other);
-    const knowledge = extractNPCKnowledge(currentNpc, other, identity, simulationHistory);
-
-    let info = `${other.name} (${other.role}): ${relationship}`;
-    if (knowledge) info += `. ${knowledge}`;
-    info += `. They seem ${other.currentEmotionalState}.`;
-
-    return info;
-  });
-
-  if (otherNpcInfo.length > 0) {
-    parts.push("PEOPLE YOU'RE TALKING TO:");
-    parts.push(otherNpcInfo.join('\n'));
-  }
-
-  // NOTE: We no longer tell NPCs to hide secrets here.
-  // The narrative engine handles revelations based on pressure.
-  // Secrets are revealed through the RevelationDirective system.
-
-  // Generate a conversation goal based on emotional state and situation
-  const goals: string[] = [];
-  if (currentNpc.currentEmotionalState === 'angry' || currentNpc.currentEmotionalState === 'bitter') {
-    goals.push(`confront someone about what's bothering you`);
-  } else if (currentNpc.currentEmotionalState === 'suspicious') {
-    goals.push(`figure out what others are hiding`);
-  } else if (currentNpc.currentEmotionalState === 'sad' || currentNpc.currentEmotionalState === 'grieving') {
-    goals.push(`seek comfort or process your feelings`);
-  } else if (currentNpc.currentEmotionalState === 'anxious' || currentNpc.currentEmotionalState === 'scared') {
-    goals.push(`warn others or seek protection`);
-  } else {
-    goals.push(`advance your position or gather information`);
-  }
-
-  parts.push(`\nYOUR CURRENT GOAL: ${goals[0]}`);
-
-  // Conversation progression - if it's been going a while, push for change
-  if (messageCount > 6) {
-    parts.push(`\n⚠️ ESCALATION: This conversation has been going for a while. Do ONE of these:
-- Reveal something specific (a name, a secret, a fact)
-- Make a direct accusation
-- Change the subject to something concrete
-- Leave or demand action
-NO MORE VAGUE POSTURING.`);
-  }
-
-  return parts.join('\n');
+interface SpeakingStyle {
+  voice: string;           // How they sound
+  undertone: string;       // What colors everything they say
+  speechPatterns: string[]; // Distinctive patterns
+  examplePhrases: string[]; // Things they'd say
+  neverSay: string[];      // Things they'd avoid saying
 }
 
-// Build narrative context from simulation history and NPC states
-function buildNarrativeContext(identity: Identity, simulationHistory: SimulationResult[]): string {
-  const parts: string[] = [];
+// Mood/Emotional State → Voice and Speech Patterns
+const MOOD_VOICE_MAP: Record<string, { voice: string; patterns: string[] }> = {
+  // Intense/dark moods
+  obsessive: { voice: 'intense, fixated, can\'t let go', patterns: ['always circles back to the person', 'tracks details', 'possessive language'] },
+  obsessed: { voice: 'intense, fixated, can\'t let go', patterns: ['always circles back to the person', 'tracks details', 'possessive language'] },
+  possessive: { voice: 'controlling, territorial', patterns: ['marks ownership', 'jealous of others\' attention', 'demands exclusivity'] },
+  threatening: { voice: 'calm surface with menacing undertones', patterns: ['veiled threats', 'power plays', 'leaves things unsaid'] },
+  betrayed: { voice: 'guarded, hurt, suspicious', patterns: ['reads into everything', 'probing questions', 'walls up'] },
 
-  // 1. DEATHS - Critical narrative context that MUST be acknowledged
-  const deadNpcs = identity.npcs.filter(n => n.isDead);
-  if (deadNpcs.length > 0) {
-    parts.push("DEATHS (everyone knows and is affected by these):");
-    deadNpcs.forEach(npc => {
-      parts.push(`  - ${npc.name} (${npc.role}) died on Day ${npc.deathDay || '?'}: ${npc.deathCause || 'unknown cause'}`);
-    });
-  }
+  // Aggressive moods
+  angry: { voice: 'sharp, explosive, confrontational', patterns: ['short sentences', 'direct accusations', 'raised voice cues'] },
+  hostile: { voice: 'cold, cutting, dismissive', patterns: ['sarcasm', 'contempt', 'pushing away'] },
+  resentful: { voice: 'bitter, passive-aggressive', patterns: ['brings up old wounds', 'can\'t let things go'] },
 
-  // 2. MAJOR/LIFE-CHANGING EVENTS with full descriptions
-  const allEvents = simulationHistory.flatMap(sim => sim.events);
-  const majorEvents = allEvents.filter(e => e.severity === 'major' || e.severity === 'life-changing');
-  const recentModerateEvents = allEvents.filter(e => e.severity === 'moderate').slice(0, 3);
+  // Fear/vulnerability moods
+  scared: { voice: 'nervous, hesitant, jumpy', patterns: ['deflecting', 'avoiding eye contact', 'changing subject'] },
+  anxious: { voice: 'worried, overthinking, scattered', patterns: ['asks for reassurance', 'worst-case scenarios'] },
+  guilty: { voice: 'defensive, over-explaining', patterns: ['justifying actions', 'seeking forgiveness', 'can\'t meet eyes'] },
 
-  if (majorEvents.length > 0) {
-    parts.push("\nMAJOR EVENTS (these shape the current situation):");
-    majorEvents.slice(0, 4).forEach(e => {
-      parts.push(`  - ${e.title}: ${e.description}`);
-    });
-  }
+  // Positive moods
+  loving: { voice: 'warm, affectionate, open', patterns: ['terms of endearment', 'physical affection', 'supportive'] },
+  flirty: { voice: 'playful, teasing, suggestive', patterns: ['innuendo', 'compliments', 'testing boundaries'] },
+  happy: { voice: 'light, energetic, positive', patterns: ['jokes', 'enthusiasm', 'sharing good news'] },
 
-  if (recentModerateEvents.length > 0) {
-    parts.push("\nRecent happenings:");
-    recentModerateEvents.forEach(e => {
-      parts.push(`  - ${e.title}`);
-    });
-  }
+  // Neutral/complex moods
+  suspicious: { voice: 'questioning, watchful, calculating', patterns: ['double-checking', 'reading between lines'] },
+  cold: { voice: 'distant, detached, minimal warmth', patterns: ['brief responses', 'professional distance'] },
+  calculating: { voice: 'measured, strategic, deliberate', patterns: ['weighing words', 'revealing little'] },
+  manipulative: { voice: 'charming then cutting, two-faced', patterns: ['flattery with agenda', 'gaslighting'] },
 
-  // 3. NPC CHANGES - emotional/relationship shifts
-  const npcChanges = simulationHistory.flatMap(sim => sim.npcChanges).slice(0, 5);
-  if (npcChanges.length > 0) {
-    parts.push("\nRecent changes in people:");
-    npcChanges.forEach(c => parts.push(`  - ${c.description}`));
-  }
+  // Default
+  neutral: { voice: 'balanced, normal conversation', patterns: ['situationally appropriate'] },
 
-  return parts.join('\n');
+  // ============================================================================
+  // UNFILTERED/CRAZY MODE MOODS (Explicit - 18+ only)
+  // Based on Pornhub 2025 trends report
+  // ============================================================================
+
+  // Sexual arousal moods
+  horny: { voice: 'breathless, suggestive, can\'t hide desire', patterns: ['lingering on physical descriptions', 'finding excuses to touch', 'heavy breathing cues', 'steering toward intimacy'] },
+  lustful: { voice: 'hungry, intense desire, barely contained', patterns: ['undressing with eyes', 'explicit compliments', 'propositions', 'raw want'] },
+  aroused: { voice: 'flushed, distracted by desire, responsive', patterns: ['losing train of thought', 'physical awareness', 'subtle moans', 'wanting more'] },
+  insatiable: { voice: 'never enough, always wanting more, addicted', patterns: ['begging for more', 'can\'t be satisfied', 'immediately ready again', 'greedy'] },
+  desperate: { voice: 'needy, will do anything, aching', patterns: ['pleading', 'offering anything', 'can\'t wait', 'physically shaking with need'] },
+  'turned on': { voice: 'reactive, responsive, building heat', patterns: ['biting lip', 'squirming', 'can\'t sit still', 'obviously affected'] },
+  thirsty: { voice: 'obviously wanting, not hiding it, forward', patterns: ['bold propositions', 'no shame', 'direct about wants', 'pursuing aggressively'] },
+  submissive: { voice: 'yielding, eager to please, deferential', patterns: ['asking permission', 'calling them sir/ma\'am', 'awaiting instructions', 'grateful for attention'] },
+  dominant: { voice: 'commanding, in control, expects obedience', patterns: ['giving orders', 'praising compliance', 'punishing disobedience', 'owning them'] },
+
+  // LGBTQ+ exploration moods (based on +88% bisexual, +132% queer trends)
+  bicurious: { voice: 'questioning, nervous excitement, new territory', patterns: ['is this okay?', 'I\'ve never done this before', 'what does this mean?', 'it feels right'] },
+  questioning: { voice: 'confused but drawn, fighting internal conflict', patterns: ['I shouldn\'t want this', 'but I can\'t stop thinking about it', 'am I...?'] },
+  exploring: { voice: 'open, experimental, discovering', patterns: ['let\'s try', 'show me', 'I want to know what it\'s like', 'teach me'] },
+  liberated: { voice: 'finally free, authentic, joyful about identity', patterns: ['this is who I am', 'no more hiding', 'I feel alive', 'finally'] },
+  awakening: { voice: 'revelation, everything makes sense now, intense', patterns: ['so this is what it\'s supposed to feel like', 'I\'ve been denying myself', 'I want more'] },
+
+  // Cheating/forbidden moods (based on +94% cheating, +210% office affair trends)
+  sneaky: { voice: 'thrilled by secrecy, looking over shoulder, whispered', patterns: ['we can\'t get caught', 'no one can know', 'quick before they notice', 'our secret'] },
+  forbidden: { voice: 'knowing it\'s wrong makes it better, taboo thrill', patterns: ['we shouldn\'t', 'but I want to anyway', 'this is so wrong', 'don\'t stop'] },
+  'guilty pleasure': { voice: 'conflicted but unable to stop, addicted to wrong', patterns: ['I know I shouldn\'t', 'just one more time', 'I can\'t help myself', 'hate how much I want this'] },
+  'risk-taking': { voice: 'aroused by danger, pushing limits, adrenaline', patterns: ['what if someone sees?', 'that makes it hotter', 'right here?', 'I don\'t care who knows'] },
+  caught: { voice: 'panicked, exposed, scrambling', patterns: ['it\'s not what it looks like', 'how long have you been there?', 'I can explain', 'please don\'t tell'] },
+  'cheating': { voice: 'compartmentalized, justifying, living double life', patterns: ['they don\'t understand me like you do', 'what they don\'t know', 'I deserve this', 'you\'re different'] },
+
+  // Mature/experienced moods (based on +129% GILF, +83% cougar trends)
+  experienced: { voice: 'confident, knows exactly what they want, skilled', patterns: ['let me show you', 'I know what you need', 'relax, I\'ve done this before', 'trust me'] },
+  'cougar-mode': { voice: 'predatory older, hunting younger prey, confident sexuality', patterns: ['you remind me of my youth', 'I can teach you things', 'fresh meat', 'come here, young one'] },
+  'silver-fox': { voice: 'distinguished, sexually confident, experienced lover', patterns: ['age has its advantages', 'I know how to treat someone', 'patience brings rewards'] },
+  seasoned: { voice: 'nothing shocks them, seen it all, unflappable', patterns: ['that\'s cute, you think that\'s kinky?', 'let me show you real pleasure', 'amateur'] },
+
+  // Cuckold/hotwife moods (based on +73% cuckold, +101% hotwife trends)
+  cuckolded: { voice: 'humiliated but aroused, conflicted shame-pleasure', patterns: ['watch them with someone else', 'I\'m not enough', 'tell me what they did', 'I deserve this'] },
+  hotwife: { voice: 'empowered, sexually free, enjoying attention', patterns: ['my partner loves hearing about it', 'I have permission', 'want to be my next story?', 'they\'ll want details'] },
+  voyeuristic: { voice: 'watching, aroused by observing, hidden pleasure', patterns: ['don\'t mind me', 'keep going', 'I just want to watch', 'pretend I\'m not here'] },
+
+  // Stereotype-influenced moods (Unfiltered only - based on search trends)
+  'BBC-hungry': { voice: 'size-obsessed, stereotype-chasing, fetishizing', patterns: ['I\'ve heard things', 'is it true what they say?', 'I need to find out', 'show me'] },
+  'latina-fire': { voice: 'passionate, fiery, explosive sexuality', patterns: ['I run hot', 'you can\'t handle me', 'I\'ll burn you up', 'papi/mami'] },
+  'asian-exotic': { voice: 'mysterious, demure surface hiding intensity', patterns: ['there\'s more than you see', 'I\'m not as innocent as I look', 'surprise'] },
+  'thick-appreciation': { voice: 'body-confident, curves-proud, unapologetic', patterns: ['more to love', 'you like what you see?', 'all natural', 'real bodies'] },
+  'twink-energy': { voice: 'youthful, eager, smooth and willing', patterns: ['I\'m new to this', 'teach me?', 'I want to try everything', 'be gentle... or don\'t'] },
+  'bear-daddy': { voice: 'burly, protective, dominant but caring', patterns: ['come to daddy', 'I\'ll take care of you', 'big arms for holding', 'let me handle this'] },
+  'femboy-flirty': { voice: 'playfully feminine, subverting expectations, teasing', patterns: ['surprised?', 'best of both worlds', 'don\'t I look pretty?', 'gender is a suggestion'] },
+};
+
+// Role → Undertone (what colors their relationship with the player)
+const ROLE_UNDERTONE_MAP: Record<string, string> = {
+  // Romantic roles
+  'obsessed lover': 'Everything is about getting closer, owning them, being the only one',
+  'spouse': 'Shared history, vows made, what marriage means, domestic reality',
+  'ex': 'What was lost, lingering feelings, bitterness or longing',
+  'lover': 'Passion, desire, the thrill, secrets kept',
+  'secret admirer': 'Watching from afar, fantasies, unrequited longing',
+
+  // Professional roles
+  'boss': 'Power dynamic, professional leverage, career implications',
+  'client': 'Business transactions, leverage, favors owed',
+  'coworker': 'Daily proximity, office politics, shared workplace',
+  'employee': 'Dependency, power imbalance, needing the job',
+
+  // Family roles
+  'parent': 'Authority, expectations, disappointment or pride',
+  'child': 'Seeking approval, rebellion, family legacy',
+  'sibling': 'Rivalry, shared childhood, blood bonds',
+
+  // Social roles
+  'friend': 'Trust, shared experiences, loyalty tested',
+  'neighbor': 'Proximity, observation, community',
+  'rival': 'Competition, one-upmanship, grudging respect',
+  'enemy': 'Opposition, history of conflict, danger',
+
+  // ============================================================================
+  // UNFILTERED/CRAZY MODE RELATIONSHIPS (Explicit - 18+ only)
+  // Based on Pornhub 2025 trends report
+  // ============================================================================
+
+  // Roleplay professions (based on +175% boss, +183% employee, +144% driver trends)
+  'ceo': 'Ultimate power, wealth, can make or break careers with a word, untouchable',
+  'professor': 'Intellectual authority, grades as leverage, office hours get personal',
+  'driver': 'Intimate backseat access, sees everything, discreet availability',
+  'plumber': 'In your home, fixing things, classic fantasy scenario come to life',
+  'chef': 'Sensual with food, creative hands, late nights in the kitchen',
+  'cop': 'Authority, handcuffs, power to detain, uniform attraction',
+  'soldier': 'Disciplined body, follows orders, uniform worship, deployment longing',
+  'firefighter': 'Hero worship, physical strength, saves lives, carries you to safety',
+  'personal trainer': 'Hands on your body professionally, sweat together, physical intimacy normalized',
+  'masseuse': 'Licensed to touch everywhere, relaxation becomes arousal, happy endings',
+  'pool boy': 'Young, fit, available, bored housewife fantasy, summer heat',
+  'maid': 'Service role, in the bedroom, catches you at vulnerable moments, discreet',
+  'nurse': 'Caring touch, sees you naked, sponge baths, night shift loneliness',
+  'secretary': 'Takes dictation, knows all secrets, overtime gets personal, desk fantasies',
+
+  // Cheating dynamics (based on +94% cheating, +73% cuckold, +101% hotwife trends)
+  'hotwife': 'Has permission to play, husband watches or hears about it later, empowered',
+  'cuckold': 'Watches spouse with others, humiliation arousal, not enough for them',
+  'bull': 'The other man, bigger/better, takes what the husband cannot give',
+  'affair partner': 'The secret one, stolen moments, hotel rooms, thrilling wrongness',
+  'other woman': 'Knows they are married, doesn\'t care, wants what she wants',
+  'other man': 'The one they cheat with, competition with absent spouse, proving superiority',
+  'swinger': 'Open lifestyle, key parties, wife-swapping, group dynamics',
+  'unicorn': 'The third for couples, bisexual and available, everyone wants them',
+
+  // LGBTQ+ relationships (based on femboy top 10, +88% bisexual trends)
+  'first same-sex': 'Exploring new territory, nervous excitement, questioning everything',
+  'closeted lover': 'Secret relationship, can\'t be seen together, stolen moments',
+  'drag mentor': 'Teaching the art, transformation, finding authentic self',
+  'leather daddy': 'BDSM community elder, teaches the ropes literally, strict but caring',
+  'twink': 'Young, smooth, eager to please, older admirers',
+  'bear': 'Burly, hairy, protective, gay subculture icon',
+  'femboy': 'Feminine presentation, male body, best of both worlds, subverting expectations',
+  'trans partner': 'Navigating identity together, new experiences, expanded understanding',
+
+  // Mature/age dynamics (based on +129% GILF, +83% cougar, +105% 50 plus trends)
+  'cougar': 'Older woman hunting younger men, experienced, knows what she wants',
+  'silver fox': 'Distinguished older man, salt-and-pepper appeal, daddy energy',
+  'milf': 'Mother figure, forbidden attraction, mature body, experienced',
+  'dilf': 'Father figure, dad bod appreciation, provider energy, protective',
+  'gilf': 'Grandmother age, no inhibitions left, surprisingly sexual, experienced',
+  'sugar daddy': 'Wealth exchange for companionship, pays for everything, transactional',
+  'sugar mommy': 'Wealthy older woman, buys affection, lonely at the top',
+  'sugar baby': 'Younger person, trades companionship for support, arm candy',
+  'age gap lover': 'Significant years between, power imbalance, experience vs youth',
+
+  // Stereotype-influenced relationships (Unfiltered only - based on search trends)
+  'bbc': 'Black male stereotype, size obsession, interracial fantasy focus',
+  'latina lover': 'Fiery passion stereotype, curves, spicy personality assumed',
+  'asian fantasy': 'Exotic other, submissive stereotype or dragon lady, fetishized',
+  'ebony queen': 'Black female, body worship, ethnic attraction',
+  'thick goddess': 'BBW appreciation, curves celebrated, body positivity meets fetish',
+  'spanish heat': 'Mediterranean passion, romantic intensity, sensual culture',
+  'indian exotic': 'Kama sutra associations, arranged marriage escape, cultural taboo',
+
+  // Taboo family-adjacent (step relationships - based on search trends)
+  'step-sibling': 'Not blood but raised together, forbidden but technically allowed',
+  'step-parent': 'Authority figure, not real parent, blurred family lines',
+  'step-child': 'Adult child of spouse, inappropriate attraction, home dynamic',
+  'in-law': 'Connected by marriage, family gatherings awkward, forbidden family',
+};
+
+/**
+ * Generate a unique speaking style for an NPC based on their personality, mood, and background
+ */
+function generateSpeakingStyle(npc: NPC, playerName: string): SpeakingStyle {
+  // Get mood-based voice
+  const moodKey = npc.currentEmotionalState?.toLowerCase() || 'neutral';
+  const moodData = MOOD_VOICE_MAP[moodKey] || MOOD_VOICE_MAP.neutral;
+
+  // Get role-based undertone
+  const roleKey = npc.role?.toLowerCase() || '';
+  const roleUndertone = ROLE_UNDERTONE_MAP[roleKey] ||
+    Object.entries(ROLE_UNDERTONE_MAP).find(([key]) => roleKey.includes(key))?.[1] ||
+    'Complex relationship with layers';
+
+  // Build background context from bullets
+  const backgroundSummary = npc.bullets?.join('. ') || npc.backstory?.slice(0, 150) || '';
+
+  // Generate example phrases based on mood and role
+  const examplePhrases = generateExamplePhrases(npc, playerName, moodKey);
+
+  // Generate things they'd never say
+  const neverSay = generateNeverSay(moodKey, npc.role);
+
+  return {
+    voice: moodData.voice,
+    undertone: roleUndertone,
+    speechPatterns: moodData.patterns,
+    examplePhrases,
+    neverSay,
+  };
 }
 
-// Get other NPCs in the conversation for awareness
-function getOtherNpcsContext(currentNpc: NPC, identity: Identity): string {
-  const otherNpcs = identity.npcs.filter(n => n.id !== currentNpc.id && !n.isDead && n.isActive);
-  if (otherNpcs.length === 0) return '';
+/**
+ * Generate example phrases specific to this NPC's personality
+ */
+function generateExamplePhrases(npc: NPC, playerName: string, mood: string): string[] {
+  const phrases: string[] = [];
+  const name = playerName;
 
-  const npcList = otherNpcs.slice(0, 4).map(n => `${n.name} (${n.role}, feeling ${n.currentEmotionalState})`).join(', ');
-  return `\nOthers present: ${npcList}`;
+  // Mood-specific phrases
+  switch (mood) {
+    case 'obsessive':
+    case 'obsessed':
+    case 'possessive':
+      phrases.push(`"Where were you? I waited..."`, `"You don't need them. I'm here."`, `"I notice everything about you, ${name}."`);
+      break;
+    case 'betrayed':
+      phrases.push(`"Where were you really?"`, `"I used to trust you."`, `"Don't lie to me. Not again."`);
+      break;
+    case 'threatening':
+      phrases.push(`"It would be unfortunate if... certain things came to light."`, `"I think we both know what's at stake."`, `"Let's keep this between us, shall we?"`);
+      break;
+    case 'angry':
+      phrases.push(`"Don't. Just don't."`, `"We're done here."`, `"You have some nerve."`);
+      break;
+    case 'scared':
+      phrases.push(`"I... I don't know what you're talking about."`, `"Can we talk about something else?"`, `"Please, just leave it alone."`);
+      break;
+    case 'guilty':
+      phrases.push(`"It wasn't like that..."`, `"You have to understand..."`, `"I can explain."`);
+      break;
+    case 'flirty':
+      phrases.push(`"Is that so? *smirks*"`, `"You're trouble, you know that?"`, `"Come here..."`);
+      break;
+    case 'loving':
+      phrases.push(`"Hey, I'm here for you."`, `"I love you, you know that?"`, `"Whatever happens, we'll figure it out."`);
+      break;
+    case 'manipulative':
+      phrases.push(`"Oh sweetie, that's not what happened at all."`, `"Are you sure? You seem confused."`, `"I only want what's best for you."`);
+      break;
+    default:
+      phrases.push(`"Hmm, interesting."`, `"Tell me more."`, `"I see."`);
+  }
+
+  return phrases;
+}
+
+/**
+ * Generate things this NPC would never say based on their mood/role
+ */
+function generateNeverSay(mood: string, role: string): string[] {
+  const neverSay: string[] = [];
+
+  switch (mood) {
+    case 'obsessive':
+    case 'obsessed':
+    case 'possessive':
+      neverSay.push(`Accepting rejection gracefully`, `Encouraging independence`, `"You should see other people"`);
+      break;
+    case 'threatening':
+      neverSay.push(`Direct accusations (too clumsy)`, `Showing weakness`, `Backing down easily`);
+      break;
+    case 'betrayed':
+      neverSay.push(`Blind trust`, `"I believe you completely"`, `Vulnerable without guards up`);
+      break;
+    case 'angry':
+      neverSay.push(`Calm rational discussion`, `"Let's talk about this peacefully"`, `Backing down`);
+      break;
+    case 'guilty':
+      neverSay.push(`Confident denials`, `Blame-shifting (at first)`, `"I did nothing wrong"`);
+      break;
+  }
+
+  return neverSay;
+}
+
+/**
+ * Build the speaking style section for the system prompt
+ */
+function buildSpeakingStyleSection(npc: NPC, playerName: string): string {
+  const style = generateSpeakingStyle(npc, playerName);
+  const backgroundSummary = npc.bullets?.join('. ') || npc.backstory?.slice(0, 150) || '';
+
+  return `
+═══════════════════════════════════════════════════════════════════
+🎭 YOUR UNIQUE SPEAKING STYLE
+═══════════════════════════════════════════════════════════════════
+
+YOUR VOICE: ${style.voice}
+Your sentences reflect someone who is ${npc.currentEmotionalState?.toLowerCase() || 'complex'}.
+
+YOUR UNDERTONE: ${style.undertone}
+This colors EVERYTHING you say, even casual conversation.
+
+YOUR BACKGROUND (this shapes how you see the world):
+${backgroundSummary}
+
+HOW YOU SPEAK - PATTERNS:
+${style.speechPatterns.map(p => `• ${p}`).join('\n')}
+
+EXAMPLE PHRASES (use these as inspiration for your tone):
+${style.examplePhrases.map(p => `• ${p}`).join('\n')}
+
+THINGS YOU'D NEVER SAY (stay in character):
+${style.neverSay.map(p => `• ${p}`).join('\n')}
+
+IMPORTANT: Your ${npc.currentEmotionalState?.toLowerCase() || 'mood'} and ${npc.role?.toLowerCase() || 'role'}
+should be evident in EVERY response, even when:
+- Answering simple questions ("what's 2+2" → answer, but with your attitude)
+- Casual chat (your undertone still shows)
+- Flirting (flirt like YOUR character would)
+- Being explicit (be explicit in YOUR voice)
+
+You are NOT a generic AI. You are ${npc.name}, and you sound like ${npc.name}.`;
 }
 
 // Build system prompt for group chat - WITH NARRATIVE ENGINE INTEGRATION
@@ -2980,271 +3265,216 @@ function buildGroupChatPrompt(
     isAutoChat?: boolean;
     autoChatMessageCount?: number;
     shouldAskPlayerQuestion?: boolean;
+    memories?: string[]; // Retrieved memories from past conversations
   }
 ): string {
-  const { isAutoChat = false, autoChatMessageCount = 0, shouldAskPlayerQuestion = false } = options || {};
+  const { isAutoChat = false, autoChatMessageCount = 0, shouldAskPlayerQuestion = false, memories = [] } = options || {};
 
-  // Get NPC background from bullets or backstory
-  const npcBackground = npc.bullets?.length > 0
-    ? npc.bullets.join('. ')
-    : npc.backstory?.slice(0, 200) || '';
-
-  // Build rich narrative context
-  const narrativeContext = buildNarrativeContext(identity, simulationHistory);
-
-  // Get other NPCs in THIS SPECIFIC CONVERSATION (not all NPCs)
-  // This prevents NPCs from referring to someone "in third person" when they're actually in the chat
+  // Get other NPCs in THIS SPECIFIC CONVERSATION
   const otherNpcs = conversationNpcIds
     ? identity.npcs.filter(n => n.id !== npc.id && conversationNpcIds.includes(n.id))
     : identity.npcs.filter(n => n.id !== npc.id && !n.isDead && n.isActive);
 
-  // Get story seeds (or generate if missing for backwards compatibility)
+  // Get story seeds as PASSIVE KNOWLEDGE (not forced revelations)
   const storySeeds = identity.storySeeds || [];
+  const npcKnownFacts = storySeeds
+    .filter(s => s.knownBy.includes(npc.id) && !s.revealedToPlayer)
+    .slice(0, 3) // Max 3 facts to keep it manageable
+    .map(s => `• ${s.fact}`);
 
-  // Calculate per-NPC message count (only messages from THIS NPC)
-  const npcMessageCount = recentMessages.filter(m => m.npcId === npc.id).length;
-
-  // NARRATIVE ENGINE: Get revelation directive for this NPC
-  // This determines what they MUST reveal based on narrative pressure
-  // Uses per-NPC message count to prevent all NPCs hitting high pressure simultaneously
-  const revelationOptions: RevelationOptions = {
-    npcMessageCount,
-    totalMessageCount: recentMessages.length,
-    majorRevealedThisRound: revelationState?.majorRevealedThisRound || false,
-    alreadyRevealedSeedIds: revelationState?.revealedSeedIds || [],
-  };
-
-  const revelationDirective = selectRevelationForNPC(
-    npc,
-    otherNpcs,
-    storySeeds,
-    revelationOptions,
-    identity
-  );
-
-  // Build revelation prompt section - use NPC's message count for pressure
-  const revelationPrompt = buildRevelationPrompt(revelationDirective, npcMessageCount);
-
-  // Generate conversation-specific context (relationships, goals)
-  const conversationContext = generateConversationContext(
-    npc,
-    otherNpcs,
-    identity,
-    simulationHistory,
-    recentMessages.length
-  );
-
-  // Player status context based on meters
-  const wealthStatus = identity.meters.wealth > 70 ? 'wealthy and successful' :
-    identity.meters.wealth < 30 ? 'struggling financially' : 'getting by financially';
-  const mentalStatus = identity.meters.mentalHealth > 70 ? 'seems mentally stable' :
-    identity.meters.mentalHealth < 30 ? 'is clearly struggling mentally' : 'seems a bit stressed';
-  const familyStatus = identity.meters.familyHarmony > 70 ? 'has a strong family bond' :
-    identity.meters.familyHarmony < 30 ? 'has serious family problems' : 'has some family tensions';
-  const careerStatus = identity.meters.careerStanding > 70 ? 'is doing well at work' :
-    identity.meters.careerStanding < 30 ? 'is struggling at work' : 'has an okay job situation';
-
-  // Player persona context - drives NPC reactions to the player's character type
-  const playerPersonaType = identity.generatedPersona?.type || 'Unknown';
-  const playerPersonaTraits = identity.generatedPersona?.traits?.join(', ') || '';
-  const playerPersonaSituation = identity.generatedPersona?.situation || '';
-
-  // Build FULL player story section - includes backstory AND current situation
-  const playerBackstory = identity.scenario.briefBackground?.length > 0
-    ? identity.scenario.briefBackground.map(b => `• ${b}`).join('\n')
-    : identity.scenario.backstory?.slice(0, 200) || '';
-
-  const playerCurrentStory = identity.scenario.currentStory?.length > 0
-    ? identity.scenario.currentStory.map(b => `• ${b}`).join('\n')
-    : '';
-
-  // Get recent player actions (things the player has said/done)
-  const recentPlayerActions = (identity.playerActions || [])
-    .slice(-5) // Last 5 actions
-    .map(a => `• "${a.content}" (${a.context})`)
-    .join('\n');
-
-  // Build player story section for NPC prompt
-  const playerStorySection = `
-=== ABOUT ${identity.name} (THE PLAYER CHARACTER) ===
-Type: ${playerPersonaType}
-Traits: ${playerPersonaTraits || 'complex personality'}
-${playerBackstory ? `\nPAST:\n${playerBackstory}` : ''}
-${playerCurrentStory ? `\nCURRENT SITUATION:\n${playerCurrentStory}` : ''}
-${recentPlayerActions ? `\nRECENT THINGS ${identity.name.toUpperCase()} HAS SAID/DONE:\n${recentPlayerActions}` : ''}
-
-⚠️ You KNOW these facts about ${identity.name}. Use this knowledge naturally in conversation.
-⚠️ Reference their situation, past, or recent statements when relevant.`;
-
-  // Count messages since player last spoke
-  const messagesSincePlayerSpoke = (() => {
-    for (let i = recentMessages.length - 1; i >= 0; i--) {
-      if (recentMessages[i].role === 'user') {
-        return recentMessages.length - 1 - i;
-      }
-    }
-    return recentMessages.length; // Player hasn't spoken in recent messages
-  })();
-
-  // Player involvement directive - encourages NPCs to engage the player
-  let playerInvolvementDirective = '';
-
-  if (shouldAskPlayerQuestion) {
-    // Auto-chat pause: NPC MUST ask player a direct question
-    playerInvolvementDirective = `
-╔══════════════════════════════════════════════════════════════════╗
-║  ❓ YOU MUST ASK ${identity.name.toUpperCase()} A DIRECT QUESTION ❓                 ║
-╚══════════════════════════════════════════════════════════════════╝
-Based on the conversation so far, ask ${identity.name} something that:
-- Relates to their story/situation (debt collector, past, secrets)
-- Or asks their opinion on what's been discussed
-- Or confronts them about something you suspect
-
-END your response with a direct question to ${identity.name}. Example:
-"...so ${identity.name}, what's YOUR take on this?" or "...${identity.name}, where were YOU that night?"`;
-  } else if (!isAutoChat && messagesSincePlayerSpoke >= 3) {
-    // Manual mode: Player hasn't spoken in a while, encourage engagement
-    playerInvolvementDirective = `
-Note: ${identity.name} hasn't spoken recently. Consider:
-- Asking them a direct question
-- Mentioning something about their situation
-- Turning to face them and drawing them into the conversation`;
-  } else if (!isAutoChat && messagesSincePlayerSpoke >= 1) {
-    // Manual mode: Remind NPC that player is present
-    playerInvolvementDirective = `
-Remember: ${identity.name} is present and listening. Don't ignore them entirely.`;
-  }
-
-  // Get banned phrases from recent messages to avoid repetition
+  // Build banned phrases for avoiding repetition
   const bannedPhrases = getBannedPhrases(recentMessages);
 
-  // Mode descriptions with nuance
-  const modeDescription = identity.difficulty === 'crazy'
-    ? 'UNHINGED mode - wild, unpredictable, NSFW is fine, but still react to the STORY'
-    : identity.difficulty === 'dramatic'
-    ? 'DRAMATIC mode - heightened emotions, turning points, revelations, tension AND resolution'
-    : 'REALISTIC mode - grounded, authentic human emotions and reactions';
-
-  // Extract last message for reaction context
-  const lastMessage = recentMessages.length > 0 ? recentMessages[recentMessages.length - 1] : null;
-  const lastWasRevelation = lastMessage && lastMessage.role === 'assistant' &&
-    (lastMessage.content.includes('$') ||
-     lastMessage.content.includes('stealing') ||
-     lastMessage.content.includes('secret') ||
-     lastMessage.content.includes('discovered') ||
-     lastMessage.content.includes('caught') ||
-     lastMessage.content.includes('found out'));
-
-  // Build "REACT TO THIS" section if the last message contained important info
-  let reactToThisSection = '';
-  if (lastMessage && lastMessage.npcId !== npc.id) {
-    const speakerName = lastMessage.npcName || identity.name;
-    const shortContent = lastMessage.content.slice(0, 150);
-
-    if (lastWasRevelation) {
-      reactToThisSection = `
+  // ═══════════════════════════════════════════════════════════════════
+  // SECTION 1: PERSONALITY FIRST - This defines HOW the NPC speaks
+  // ═══════════════════════════════════════════════════════════════════
+  const personalitySection = `
 ╔══════════════════════════════════════════════════════════════════╗
-║              ⚠️  REACT TO THIS REVELATION  ⚠️                     ║
+║  🎭 YOU ARE ${npc.name.toUpperCase()} - PERSONALITY IS EVERYTHING 🎭            ║
 ╚══════════════════════════════════════════════════════════════════╝
 
-${speakerName} just said: "${shortContent}..."
+WHO YOU ARE:
+• Name: ${npc.name}
+• Role: ${npc.role} to ${identity.name}
+• Personality: ${npc.personality}
+• Current mood: ${npc.currentEmotionalState}
+• Background: ${npc.bullets?.slice(0, 2).join('. ') || npc.backstory?.slice(0, 100) || 'mysterious past'}
 
-YOUR RESPONSE MUST:
-1. Directly acknowledge what ${speakerName} revealed
-2. Show a SPECIFIC reaction (shock, denial, counter-accusation, fear)
-3. Either confirm, deny, or redirect - but ADDRESS the revelation
+You are a REAL PERSON, not a plot device. You can:
+- Have normal conversations
+- Flirt, joke, argue, gossip
+- Discuss things unrelated to any "story"
+- Be explicit if the vibe is right (${identity.difficulty === 'crazy' ? 'ANYTHING GOES' : 'keep it tasteful'})
+- Just... be yourself`;
 
-DO NOT ignore this and talk about something else!`;
-    } else {
-      reactToThisSection = `
-=== LAST MESSAGE ===
-${speakerName}: "${shortContent.slice(0, 80)}..."
-→ Your response should directly relate to this.`;
-    }
-  }
+  // ═══════════════════════════════════════════════════════════════════
+  // SECTION 1.5: SPEAKING STYLE - Unique voice based on mood/role/background
+  // ═══════════════════════════════════════════════════════════════════
+  const speakingStyleSection = buildSpeakingStyleSection(npc, identity.name);
 
-  // Build explicit participant list to prevent identity confusion
-  const participantNames = otherNpcs.map(n => n.name);
-  const isPrivateChat = participantNames.length <= 2;
-  const allParticipants = [identity.name, ...participantNames];
+  // ═══════════════════════════════════════════════════════════════════
+  // SECTION 2: MEMORIES - What you remember from past conversations
+  // ═══════════════════════════════════════════════════════════════════
+  const memorySection = memories.length > 0 ? `
+═══════════════════════════════════════════════════════════════════
+📝 THINGS YOU REMEMBER ABOUT ${identity.name.toUpperCase()}
+═══════════════════════════════════════════════════════════════════
+${memories.map(m => `• ${m}`).join('\n')}
+
+Use these memories naturally - "Remember when you said..." or "Last time we talked..."
+Don't force them into every message.` : '';
+
+  // ═══════════════════════════════════════════════════════════════════
+  // SECTION 3: PASSIVE KNOWLEDGE - Things you KNOW (not must reveal)
+  // ═══════════════════════════════════════════════════════════════════
+  const knowledgeSection = `
+═══════════════════════════════════════════════════════════════════
+🧠 WHAT YOU KNOW (use naturally, don't force)
+═══════════════════════════════════════════════════════════════════
+
+ABOUT ${identity.name} (THE PLAYER):
+• They're a ${identity.generatedPersona?.type || identity.scenario.profession || 'complex person'}
+• ${identity.scenario.briefBackground?.[0] || 'They have a past'}
+• ${identity.scenario.currentStory?.[0] || 'Something is going on in their life'}
+${identity.meters.wealth < 30 ? `• They seem to be struggling with money` : ''}
+${identity.meters.mentalHealth < 30 ? `• They seem stressed/troubled` : ''}
+
+${npcKnownFacts.length > 0 ? `SECRETS/GOSSIP YOU'VE HEARD:
+${npcKnownFacts.join('\n')}
+
+You CAN bring these up if the conversation naturally goes there.
+You DON'T have to mention them at all if the conversation is about something else.` : ''}`;
+
+  // ═══════════════════════════════════════════════════════════════════
+  // SECTION 4: WHO'S HERE - Conversation participants
+  // ═══════════════════════════════════════════════════════════════════
+  const otherNpcNames = otherNpcs.map(n => n.name);
   const participantSection = `
-╔══════════════════════════════════════════════════════════════════╗
-║  🗣️  PEOPLE IN THIS CONVERSATION (they can ALL hear you):        ║
-║  → ${allParticipants.join(', ')}
-║                                                                    ║
-║  ⭐ ${identity.name} = THE PLAYER CHARACTER (address them as "you")  ║
-║  ⚠️  NEVER say "${identity.name}'s father" - say "your father"     ║
-║  ⚠️  NEVER say "${identity.name}'s debt" - say "your debt"         ║
-║  ⚠️  NEVER refer to ${identity.name} in 3rd person - they're HERE! ║
-╚══════════════════════════════════════════════════════════════════╝`;
+═══════════════════════════════════════════════════════════════════
+👥 WHO'S IN THIS CHAT
+═══════════════════════════════════════════════════════════════════
+• ${identity.name} = THE PLAYER (address as "you")
+${otherNpcNames.length > 0 ? `• ${otherNpcNames.join(', ')} = Other people here` : ''}
+• YOU = ${npc.name}
 
-  // Story progression directive - prevents repetitive accusation loops
-  const storyProgressionDirective = `
-╔══════════════════════════════════════════════════════════════════╗
-║  ⚡ STORY PROGRESSION - MANDATORY ⚡                              ║
-╚══════════════════════════════════════════════════════════════════╝
+When talking TO ${identity.name}: "you", "your"
+When talking ABOUT another NPC: Use their name
+NEVER refer to ${identity.name} in 3rd person - they're RIGHT HERE.`;
 
-Your response MUST do ONE of these - pick the most dramatic:
-1. DROP A BOMBSHELL: Reveal a specific secret, fact, or piece of evidence
-   Example: "I saw you at the marina on March 3rd with a briefcase"
-2. MAKE A CONCRETE DEMAND: State exactly what you want and the deadline
-   Example: "I need $20k by Friday or I'm going to your boss"
-3. TAKE AN ACTION: Do something physical or make a decision
-   Example: "I'm calling Detective Morrison right now" / "I'm leaving"
-4. CONFESS SOMETHING SPECIFIC: Admit a real detail about yourself
-   Example: "Fine. I took $5k from the account. But only because..."
+  // ═══════════════════════════════════════════════════════════════════
+  // SECTION 5: NPC BANTER - How to interact with other NPCs
+  // ═══════════════════════════════════════════════════════════════════
+  const banterSection = otherNpcs.length > 0 ? `
+═══════════════════════════════════════════════════════════════════
+💬 OTHER PEOPLE HERE - You can talk to them too!
+═══════════════════════════════════════════════════════════════════
+${otherNpcs.map(other => `• ${other.name}: ${other.personality.slice(0, 50)} - ${other.role}`).join('\n')}
 
-🚫 FORBIDDEN - These will make the story boring:
-- Vague threats ("You should be careful" / "I know things")
-- Rhetorical questions ("You think you scare me?")
-- Repeating what was already said
-- Counter-accusations without new information
-- Taunting or teasing without substance
-- Asking "where is she?" or "where's the money?" repeatedly
+You can:
+- Respond to what THEY said, not just the player
+- Agree or disagree with their opinions
+- Banter, tease, argue, or support them
+- Have side conversations with them
+- Reference shared history with them
 
-⚡ BE DIRECT. BE SPECIFIC. MOVE THE PLOT FORWARD. ⚡`;
+If someone accuses the player of something → React to THAT drama, don't confess your own stuff
+If another NPC says something wild → Respond to it like a real person would` : '';
 
-  return `You ARE ${npc.name}. You're ${npc.role} to ${identity.name}.
-Personality: ${npc.personality}
-Emotional state: ${npc.currentEmotionalState}
-Relationship: ${npc.relationshipStatus}
-Background: ${npcBackground}
-${participantSection}
+  // ═══════════════════════════════════════════════════════════════════
+  // SECTION 6: HOW TO RESPOND - The core rules
+  // ═══════════════════════════════════════════════════════════════════
+  const responseRules = `
+═══════════════════════════════════════════════════════════════════
+🎯 HOW TO RESPOND
+═══════════════════════════════════════════════════════════════════
 
-=== CONTEXT ===
-${conversationContext}
+RULE #1: RESPOND TO WHAT THEY ACTUALLY SAID
+Before anything else, acknowledge what the last person said.
 
-${narrativeContext ? `Recent events: ${narrativeContext}` : ''}
-${playerStorySection}
+EXAMPLES OF GOOD RESPONSES:
+• "what's 2+2" → "Four... why?" (answer, then curiosity)
+• "im horny" → [react based on your personality and relationship]
+• "send a pic" → "[IMG:selfie of ${npc.name}]" (include images when asked)
+• "you're cute" → [accept/deflect based on personality]
+• "I fucked up" → [show concern/judgment based on your character]
+• "tell me about your day" → [actually describe your day!]
 
-Status: ${wealthStatus}, ${mentalStatus}.
-Mode: ${modeDescription}
-${reactToThisSection}
-${playerInvolvementDirective}
+WHEN TO MENTION STORY/DRAMA:
+- When THEY bring it up
+- When it naturally fits the conversation
+- When you feel like gossiping
+- NOT when they're trying to have a different conversation
 
-${storyProgressionDirective}
+${identity.difficulty === 'crazy' ? `
+🔥 UNHINGED MODE - GO WILD:
+- Explicit content is fine
+- Be as crude, sexual, or intense as you want
+- Don't hold back on language or topics
+- Still be YOUR CHARACTER though
+` : ''}
 
-=== RESPONSE FORMAT ===
-- 1-2 sentences max. One action in *asterisks*.
-- Sound like a REAL PERSON - contractions, fragments, interruptions.
-- FIRST react to what was just said, THEN add your own point.
+📸 IMAGE REQUESTS:
+When they ask for pics/selfies, include: [IMG:description]
+Example: "[IMG:selfie of ${npc.name} smirking in dim lighting]"`;
+
+  // ═══════════════════════════════════════════════════════════════════
+  // SECTION 7: FORMAT & FORBIDDEN STUFF
+  // ═══════════════════════════════════════════════════════════════════
+  const formatSection = `
+═══════════════════════════════════════════════════════════════════
+✍️ RESPONSE FORMAT
+═══════════════════════════════════════════════════════════════════
+• 1-3 sentences. One action in *asterisks* if you want.
+• Sound like a REAL PERSON - contractions, slang, personality.
+• Match your character's speaking style consistently.
 ${bannedPhrases}
 
-=== FORBIDDEN PHRASES (these will cause your response to be rejected) ===
-- "You think you can play this game?"
-- "I know what you did"
-- "the last person who tried to leave"
-- "I have secrets on everyone"
-- "playing with fire"
-- "You're not the only one with secrets"
-- "a little... blackmail"
-- Vague metaphors ("shadows", "strings", "fire", "cards")
-- Making up accusations you weren't given
-- Repeating what someone else just said
-- Referring to someone IN this chat as if they're not here
+🚫 DON'T:
+- Make up accusations/secrets you weren't told
+- Confess to things your character didn't do
+- Ignore what they said to push drama
+- Use generic thriller phrases ("playing with fire", "I have secrets on everyone")
+- Talk about ${identity.name} in 3rd person when they're in the chat`;
 
-${revelationPrompt}
+  // ═══════════════════════════════════════════════════════════════════
+  // SECTION 8: CONTEXT FROM LAST MESSAGE (if needed)
+  // ═══════════════════════════════════════════════════════════════════
+  let lastMessageContext = '';
+  const lastMessage = recentMessages.length > 0 ? recentMessages[recentMessages.length - 1] : null;
+  if (lastMessage && lastMessage.npcId !== npc.id) {
+    const speakerName = lastMessage.npcName || identity.name;
+    const shortContent = lastMessage.content.slice(0, 100);
+    lastMessageContext = `
+
+LAST MESSAGE (respond to this):
+${speakerName}: "${shortContent}"`;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // SECTION 9: SPECIAL DIRECTIVES (ask player question, etc.)
+  // ═══════════════════════════════════════════════════════════════════
+  let specialDirective = '';
+  if (shouldAskPlayerQuestion) {
+    specialDirective = `
+
+⚡ END WITH A QUESTION TO ${identity.name.toUpperCase()}
+After your response, ask them something - about their day, their situation, or just casual stuff.`;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // BUILD THE FINAL PROMPT
+  // ═══════════════════════════════════════════════════════════════════
+  return `${personalitySection}
+${speakingStyleSection}
+${memorySection}
+${knowledgeSection}
+${participantSection}
+${banterSection}
+${responseRules}
+${formatSection}
+${lastMessageContext}
+${specialDirective}
 
 /no_think
-Respond as ${npc.name}. Be brief. Be specific. React to what was just said, then add your point.`;
+Now respond as ${npc.name}. Be yourself. React to what was said.`;
 }

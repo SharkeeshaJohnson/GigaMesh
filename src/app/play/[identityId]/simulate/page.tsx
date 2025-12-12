@@ -20,8 +20,9 @@ import {
   getQueuedActions,
 } from '@/lib/indexeddb';
 import { Conversation } from '@/lib/types/conversation';
-import { useChat, useMemory } from '@/lib/reverbia';
+import { useChat, useMemory, useImageGeneration } from '@/lib/reverbia';
 import { MODEL_CONFIG } from '@/lib/models';
+import { STYLE_PROMPTS } from '@/lib/image-models';
 import {
   buildSafetyPreamble,
   getScenarioTone,
@@ -38,7 +39,7 @@ import {
   advanceDay,
   getNarrativeSummary,
 } from '@/lib/narrative';
-import { compositeImage, createSelfie } from '@/lib/image-compositing';
+import { compositeImage } from '@/lib/image-compositing';
 
 // Event image cache type
 interface EventImageCache {
@@ -85,6 +86,12 @@ function SimulatePageContent() {
   });
 
   const { extractMemoriesFromMessage } = useMemory();
+
+  const { generateImage } = useImageGeneration({
+    onError: (error) => {
+      console.error('[Simulation] Image generation error:', error);
+    },
+  });
 
   // Clear actions for the completed day
   const clearCompletedActions = async (identityId: string) => {
@@ -507,7 +514,135 @@ function SimulatePageContent() {
     return 'neutral';
   };
 
-  // Generate images for simulation events using sprite compositing (no API calls)
+  // Extract location/setting from event description
+  const extractLocationFromEvent = (description: string, title: string): string => {
+    const text = `${title} ${description}`.toLowerCase();
+
+    // Location keyword mapping
+    const locationMap: Record<string, string> = {
+      // Work locations
+      'office': 'corporate office interior, desks and computers, fluorescent lighting',
+      'workplace': 'modern workplace interior, professional environment',
+      'meeting': 'conference room, long table, office chairs, presentation screen',
+      'boardroom': 'executive boardroom, large wooden table, leather chairs',
+      'cubicle': 'office cubicle area, partitioned workspaces',
+
+      // Home locations
+      'home': 'cozy home interior, living room, warm lighting, comfortable furniture',
+      'house': 'residential home interior, family living space',
+      'apartment': 'modern apartment interior, urban living space',
+      'bedroom': 'bedroom interior, bed, nightstand, soft lighting',
+      'kitchen': 'home kitchen, countertops, appliances, warm atmosphere',
+      'living room': 'living room, sofa, coffee table, TV, family space',
+
+      // Public locations
+      'restaurant': 'restaurant interior, dining tables, ambient lighting',
+      'cafe': 'cozy coffee shop, cafe tables, warm lighting, coffee atmosphere',
+      'bar': 'dimly lit bar interior, counter, bottles, moody atmosphere',
+      'club': 'nightclub interior, dance floor, colorful lights',
+      'hospital': 'hospital room, medical equipment, sterile white walls',
+      'court': 'courtroom interior, judge bench, wooden furniture, formal',
+      'police': 'police station interior, desks, holding area',
+      'church': 'church interior, pews, altar, stained glass, sacred',
+      'school': 'classroom interior, desks, chalkboard, educational',
+
+      // Outdoor locations
+      'street': 'city street scene, buildings, sidewalk, urban environment',
+      'park': 'public park, trees, benches, green grass, peaceful',
+      'beach': 'beach scene, sand, ocean waves, sunny sky',
+      'garden': 'garden setting, flowers, plants, natural beauty',
+      'parking': 'parking lot, cars, concrete, outdoor',
+      'alley': 'dark alley, brick walls, urban, mysterious',
+
+      // Dramatic locations
+      'funeral': 'funeral setting, somber atmosphere, flowers, dark colors',
+      'wedding': 'wedding venue, decorations, flowers, celebration',
+      'party': 'party scene, decorations, festive atmosphere, celebration',
+    };
+
+    // Find matching location
+    for (const [keyword, setting] of Object.entries(locationMap)) {
+      if (text.includes(keyword)) {
+        return setting;
+      }
+    }
+
+    // Infer from context clues
+    if (text.includes('work') || text.includes('boss') || text.includes('colleague') || text.includes('fired') || text.includes('promotion')) {
+      return 'corporate office interior, professional workplace';
+    }
+    if (text.includes('family') || text.includes('spouse') || text.includes('dinner') || text.includes('breakfast')) {
+      return 'cozy home interior, family living space';
+    }
+    if (text.includes('night') || text.includes('evening') || text.includes('dark')) {
+      return 'nighttime scene, dark atmosphere, moonlight';
+    }
+    if (text.includes('morning') || text.includes('sunrise') || text.includes('dawn')) {
+      return 'morning scene, soft sunrise lighting, new day';
+    }
+
+    // Default to generic indoor scene
+    return 'interior scene, ambient lighting, atmospheric';
+  };
+
+  // Build a BACKGROUND-ONLY prompt for AI generation (no characters)
+  const buildBackgroundPrompt = (event: SimulationEvent, ident: Identity): string => {
+    const mood = inferMoodFromEvent(event.description, event.severity);
+    const emotionMod = STYLE_PROMPTS.emotions[mood as keyof typeof STYLE_PROMPTS.emotions] || STYLE_PROMPTS.emotions.neutral;
+    const location = extractLocationFromEvent(event.description, event.title);
+
+    // Build prompt that explicitly excludes characters
+    return `${STYLE_PROMPTS.sceneBase}, ${location}, ${emotionMod} atmosphere, empty scene, no people, no characters, background only, atmospheric, dramatic lighting`;
+  };
+
+  // Collect sprites for involved characters
+  const collectEventSprites = (event: SimulationEvent, ident: Identity): Array<{ url: string; position: 'left' | 'right' | 'center' | 'bottom-center'; name: string }> => {
+    const involvedNpcs = event.involvedNpcs || [];
+    const sprites: Array<{ url: string; position: 'left' | 'right' | 'center' | 'bottom-center'; name: string }> = [];
+
+    // Check if player is involved
+    const playerInvolved = involvedNpcs.some(name =>
+      name.toLowerCase() === ident.name.toLowerCase() ||
+      event.description.toLowerCase().includes(ident.name.toLowerCase())
+    );
+
+    if (playerInvolved && ident.pixelArtUrl) {
+      sprites.push({ url: ident.pixelArtUrl, position: 'left', name: ident.name });
+    }
+
+    // Find NPC sprites
+    for (const npcName of involvedNpcs) {
+      if (npcName.toLowerCase() === ident.name.toLowerCase()) continue;
+
+      const npc = ident.npcs.find(n =>
+        n.name.toLowerCase() === npcName.toLowerCase() ||
+        n.name.split(' ')[0].toLowerCase() === npcName.toLowerCase()
+      );
+
+      if (npc?.pixelArtUrl) {
+        // Position based on how many sprites we have
+        let position: 'left' | 'right' | 'center' | 'bottom-center';
+        if (sprites.length === 0) {
+          position = 'left';
+        } else if (sprites.length === 1) {
+          position = 'right';
+        } else {
+          position = 'center';
+        }
+        sprites.push({ url: npc.pixelArtUrl, position, name: npc.name });
+        if (sprites.length >= 2) break; // Max 2 characters per scene
+      }
+    }
+
+    // If only one character, center them
+    if (sprites.length === 1) {
+      sprites[0].position = 'bottom-center';
+    }
+
+    return sprites;
+  };
+
+  // Generate images for simulation events: AI background + sprite compositing
   const generateEventImages = async (simResult: SimulationResult, ident: Identity) => {
     if (imageGenerationRef.current) return;
     imageGenerationRef.current = true;
@@ -522,91 +657,67 @@ function SimulatePageContent() {
       }));
 
       try {
-        // Find NPC sprites for involved characters
-        const involvedNpcs = event.involvedNpcs || [];
-        const sprites: Array<{ url: string; position: 'left' | 'right' | 'center' | 'bottom-center' }> = [];
-
-        // Check if player is involved
-        const playerInvolved = involvedNpcs.some(name =>
-          name.toLowerCase() === ident.name.toLowerCase() ||
-          event.description.toLowerCase().includes(ident.name.toLowerCase())
-        );
-
-        if (playerInvolved && ident.pixelArtUrl) {
-          sprites.push({ url: ident.pixelArtUrl, position: 'left' });
-        }
-
-        // Find NPC sprites
-        for (const npcName of involvedNpcs) {
-          if (npcName.toLowerCase() === ident.name.toLowerCase()) continue;
-
-          const npc = ident.npcs.find(n =>
-            n.name.toLowerCase() === npcName.toLowerCase() ||
-            n.name.split(' ')[0].toLowerCase() === npcName.toLowerCase()
-          );
-
-          if (npc?.pixelArtUrl) {
-            const position = sprites.length === 0 ? 'left' : sprites.length === 1 ? 'right' : 'center';
-            sprites.push({ url: npc.pixelArtUrl, position: position as 'left' | 'right' | 'center' });
-            if (sprites.length >= 2) break; // Max 2 characters per scene
-          }
-        }
-
-        // Infer mood from event for gradient background color
+        // Collect sprites for involved characters
+        const sprites = collectEventSprites(event, ident);
         const mood = inferMoodFromEvent(event.description, event.severity);
-        console.log(`[EventImage] Event ${i}: mood=${mood}, sprites=${sprites.length}`);
 
+        console.log(`[EventImage] Event ${i}: "${event.title}" - ${sprites.length} characters, mood: ${mood}`);
+
+        // Generate AI background
+        const backgroundPrompt = buildBackgroundPrompt(event, ident);
+        console.log(`[EventImage] Background prompt:`, backgroundPrompt.substring(0, 100) + '...');
+
+        const bgResult = await generateImage({
+          prompt: backgroundPrompt,
+          size: '1024x1024',
+        });
+
+        let backgroundUrl: string | undefined;
+
+        if (bgResult.error) {
+          console.warn(`[EventImage] Background generation failed for event ${i}:`, bgResult.error);
+          // Will use gradient fallback in compositing
+        } else if (bgResult.data?.images?.[0]?.url) {
+          backgroundUrl = bgResult.data.images[0].url;
+          console.log(`[EventImage] Background generated for event ${i}`);
+        }
+
+        // Now composite sprites onto the background
         if (sprites.length > 0) {
-          // Composite sprites onto gradient background (no API call needed!)
           const composited = await compositeImage({
-            // No backgroundUrl - will use gradient based on emotion
+            backgroundUrl, // May be undefined, compositeImage handles this with gradient
             sprites: sprites.map((s) => ({
               url: s.url,
               position: s.position,
-              scale: 4 // Scale up pixel sprites
+              scale: 5 // Scale up pixel sprites for visibility
             })),
             options: {
-              width: 512,
-              height: 384,
+              width: 768,
+              height: 512,
               emotion: mood,
               addVignette: true
             }
           });
 
+          console.log(`[EventImage] Composited ${sprites.length} sprite(s) for event ${i}: ${sprites.map(s => s.name).join(', ')}`);
           setEventImages(prev => ({
             ...prev,
             [i]: { imageUrl: composited, isGenerating: false }
           }));
-        } else if (sprites.length === 0 && involvedNpcs.length > 0) {
-          // Try to find any NPC with a sprite for a selfie-style image
-          const anyNpc = ident.npcs.find(n =>
-            involvedNpcs.some(name =>
-              n.name.toLowerCase().includes(name.toLowerCase()) ||
-              name.toLowerCase().includes(n.name.split(' ')[0].toLowerCase())
-            ) && n.pixelArtUrl
-          );
-
-          if (anyNpc?.pixelArtUrl) {
-            // Create a selfie-style image of the NPC
-            const selfieImage = await createSelfie(anyNpc.pixelArtUrl, mood);
-            setEventImages(prev => ({
-              ...prev,
-              [i]: { imageUrl: selfieImage, isGenerating: false }
-            }));
-          } else {
-            // No sprites available at all
-            setEventImages(prev => ({
-              ...prev,
-              [i]: { isGenerating: false, error: 'No character sprites available' }
-            }));
-          }
+        } else if (backgroundUrl) {
+          // No sprites but we have a background - just use the background
+          console.log(`[EventImage] Using background only for event ${i} (no character sprites)`);
+          setEventImages(prev => ({
+            ...prev,
+            [i]: { imageUrl: backgroundUrl, isGenerating: false }
+          }));
         } else {
-          // No involved NPCs - create a gradient-only image
+          // No background and no sprites - create gradient scene
           const emptyScene = await compositeImage({
             sprites: [],
             options: {
-              width: 512,
-              height: 384,
+              width: 768,
+              height: 512,
               emotion: mood,
               addVignette: true
             }
@@ -618,11 +729,42 @@ function SimulatePageContent() {
         }
       } catch (error) {
         console.error(`[EventImage] Failed to generate image for event ${i}:`, error);
-        setEventImages(prev => ({
-          ...prev,
-          [i]: { isGenerating: false, error: 'Generation failed' }
-        }));
+        // Fallback to gradient + sprites
+        await fallbackToGradient(i, event, ident);
       }
+    }
+  };
+
+  // Fallback to gradient background with sprites if AI generation fails completely
+  const fallbackToGradient = async (eventIndex: number, event: SimulationEvent, ident: Identity) => {
+    try {
+      const sprites = collectEventSprites(event, ident);
+      const mood = inferMoodFromEvent(event.description, event.severity);
+
+      const composited = await compositeImage({
+        sprites: sprites.map((s) => ({
+          url: s.url,
+          position: s.position,
+          scale: 5
+        })),
+        options: {
+          width: 768,
+          height: 512,
+          emotion: mood,
+          addVignette: true
+        }
+      });
+
+      setEventImages(prev => ({
+        ...prev,
+        [eventIndex]: { imageUrl: composited, isGenerating: false }
+      }));
+    } catch (fallbackError) {
+      console.error(`[EventImage] Fallback failed for event ${eventIndex}:`, fallbackError);
+      setEventImages(prev => ({
+        ...prev,
+        [eventIndex]: { isGenerating: false, error: 'Generation failed' }
+      }));
     }
   };
 

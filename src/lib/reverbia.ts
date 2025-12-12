@@ -87,6 +87,7 @@ export function useImageGeneration(config?: {
   } as any);
 
   // Wrap generateImage to use our default model
+  // Uses b64_json format to avoid CORS issues with external URLs
   const generateImage = async (args: {
     prompt: string;
     model?: string;
@@ -99,7 +100,8 @@ export function useImageGeneration(config?: {
       prompt: args.prompt,
       size: args.size || '512x512',
       quality: args.quality,
-      response_format: args.response_format || 'url',
+      // Use b64_json to avoid CORS issues when loading images for canvas compositing
+      response_format: args.response_format || 'b64_json',
     };
     console.log('[reverbia.ts] Calling generateImage with:', {
       model: requestParams.model,
@@ -108,11 +110,19 @@ export function useImageGeneration(config?: {
       response_format: requestParams.response_format,
     });
     const result = await imageGen.generateImage(requestParams);
+
+    // Convert b64_json response to data URL for easier use
+    if (result?.data?.images?.[0]?.b64_json) {
+      const base64 = result.data.images[0].b64_json;
+      result.data.images[0].url = `data:image/png;base64,${base64}`;
+    }
+
     console.log('[reverbia.ts] generateImage response:', {
       hasError: !!result?.error,
       error: result?.error,
       hasData: !!result?.data,
       imageCount: result?.data?.images?.length || 0,
+      hasUrl: !!result?.data?.images?.[0]?.url,
     });
     return result;
   };

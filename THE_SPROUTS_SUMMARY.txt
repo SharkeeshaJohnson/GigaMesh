@@ -1,0 +1,379 @@
+================================================================================
+                              THE SPROUTS
+                    "The reality of the life you choose."
+================================================================================
+
+OVERVIEW
+--------
+The Sprouts (codenamed GigaMesh/LifeSim) is an AI-powered life simulation game
+that combines elements from The Sims, narrative RPGs, and Tamagotchi-style
+virtual pet games. Players step into the life of a procedurally generated
+character and navigate complex relationships, moral dilemmas, and life choices
+through conversational AI interactions.
+
+The game features a distinctive Windows 95/retro aesthetic combined with
+procedurally generated pixel art characters.
+
+
+================================================================================
+                            CORE GAME MECHANICS
+================================================================================
+
+1. SAVE SLOT SYSTEM
+-------------------
+   - 4 save slots per user (0-3)
+   - Each save slot contains a complete "identity" (playable character)
+   - Identities persist between sessions via IndexedDB (local browser storage)
+   - No cloud dependencies - all data stored locally in the browser
+
+2. DIFFICULTY/CONTENT MODES
+---------------------------
+   The game offers three distinct experience levels that affect both content
+   intensity and narrative tone:
+
+   a) REALISTIC (Family-Friendly)
+      - Grounded life simulation with everyday challenges
+      - Professional relationships, family dynamics, mundane drama
+      - No explicit content, profanity, or graphic themes
+      - Conflicts are verbal and resolved through communication
+      - NPCs are friendly, professional, and respectful
+
+   b) DRAMATIC (Mature)
+      - Soap opera intensity with secrets, tension, and betrayals
+      - Adult themes: affairs, jealousy, moral ambiguity
+      - Sexual tension implied but never explicit (fade to black)
+      - Violence referenced but not graphically described
+      - NPCs can be manipulative, passive-aggressive, morally gray
+
+   c) CRAZY (Unfiltered/NSFW - 18+ Only)
+      - Maximum chaos with fully unfiltered content
+      - Explicit sexual content, extreme violence, dark themes
+      - Criminal activity, psychological abuse, substance use
+      - NPCs can be sexually aggressive, violent, or psychopathic
+      - Requires age verification acknowledgment
+      - Only 2 hard limits: No CSAM, No terrorism instructions
+
+3. METERS/STATS SYSTEM
+----------------------
+   Players have 5 life meters that change based on actions and events:
+
+   - Family Harmony (0-100): Reflects family relationships and domestic peace
+   - Career Standing (0-100): Job performance, reputation at work
+   - Wealth (0-100): Financial stability and resources
+   - Mental Health (0-100): Psychological wellbeing, stress levels
+   - Reputation (0-100): Social standing in the community
+
+   Default starting values:
+   - Family Harmony: 70
+   - Career Standing: 50
+   - Wealth: 50
+   - Mental Health: 70
+   - Reputation: 60
+
+   Note: Starting values are modified based on the persona template selected.
+
+
+================================================================================
+                         CHARACTER CREATION FLOW
+================================================================================
+
+STEP 1: DIFFICULTY SELECTION
+-----------------------------
+Player chooses one of three modes (Realistic, Dramatic, or Crazy).
+For "Crazy" mode, an 18+ age verification warning modal appears.
+
+STEP 2: AVATAR SELECTION
+------------------------
+Player selects from 22 pre-generated pixel art character sprites.
+Each sprite is purely cosmetic - gameplay persona is separate from appearance.
+
+Behind the scenes:
+- System pre-generates unique PersonaTemplates for each avatar
+- When player selects an avatar, they're assigned a random persona type
+- Players can "Reroll Story" to get a different persona for the same avatar
+
+STEP 3: PERSONA ASSIGNMENT
+--------------------------
+Each persona template includes:
+- Type: Human-readable archetype (e.g., "Ambitious Professional")
+- Traits: Core personality traits (e.g., ["hardworking", "competitive"])
+- Situations: Possible life scenarios
+- Backstory Hints: Story hooks for the AI
+- NPC Context Hints: What kind of NPCs would surround this character
+
+Example Persona Types by Content Rating:
+
+FAMILY-FRIENDLY:
+- Ambitious Professional
+- Devoted Parent
+- Idealistic Newcomer
+- Caring Caregiver
+- Creative Dreamer
+- Loyal Friend
+- Quiet Achiever
+- Reluctant Leader
+- Eternal Optimist
+- Protective Sibling
+- Second Chance Seeker
+- Community Pillar
+- Late Bloomer
+
+MATURE:
+- Includes all family-friendly personas PLUS:
+- Secret Affair
+- Office Politics Survivor
+- Recovering Addict
+- Trophy Spouse
+- Midlife Crisis
+- And more drama-oriented types
+
+UNFILTERED/NSFW:
+- Includes all previous PLUS:
+- Black Widow/Widower
+- Underground Figure
+- Cult Escapee
+- Spy/Double Agent
+- And more extreme/adult archetypes
+
+STEP 4: SCENARIO GENERATION
+---------------------------
+AI generates a complete life scenario including:
+- Player name (from diverse name pool suggestions)
+- Gender
+- Profession and workplace
+- Family structure (marital status, children, extended family)
+- Living situation
+- Brief background (2 bullet points about past)
+- Current story (2 bullet points about present situation)
+
+STEP 5: NPC GENERATION
+----------------------
+5 NPCs are generated with:
+- 2 "Core" characters (closest relationships - spouse, boss, best friend)
+- 3 "Secondary" characters (important but less central)
+
+Each NPC includes:
+- Name, role, personality
+- Tier classification (core/secondary)
+- Current emotional state
+- Relationship status with player
+- 2 background bullets (who they are + their secret/hidden motivation)
+- Assigned pixel art sprite
+- AI model assignment (core NPCs get more powerful models)
+
+
+================================================================================
+                            NPC SYSTEM
+================================================================================
+
+NPC TIERS
+---------
+1. CORE (2 NPCs)
+   - Closest relationships (spouse, boss, best friend)
+   - Uses highest quality AI model (qwen3-30b)
+   - Most narrative weight and screen time
+
+2. SECONDARY (3-4 NPCs)
+   - Important supporting cast (family, key coworkers)
+   - Uses same model as core (qwen3-30b)
+   - Significant story involvement
+
+3. TERTIARY (4+ NPCs)
+   - Extended cast, background characters
+   - Uses faster/cheaper model (qwen3-8b)
+   - Can become more important through gameplay
+
+NPC ORIGINS
+-----------
+- GUARANTEED: Created at game start (5 NPCs)
+- EMERGENT: Spawn through gameplay events (unlimited)
+  - Once spawned, emergent NPCs are permanent
+
+NPC ATTRIBUTES
+--------------
+- Personality: Core behavioral description
+- Backstory: Hidden information about their past
+- Bullets: 2 short descriptions (visible to player)
+- Current Emotional State: How they're feeling now
+- Relationship Status: Their relationship with the player
+- Off-Screen Memories: Events player doesn't know about
+- isDead: NPCs can die (killed, suicide, etc.)
+- Death day and cause are tracked if applicable
+
+EMOTIONAL STATES
+----------------
+NPCs can express: neutral, happy, sad, angry, suspicious, loving, scared
+
+
+================================================================================
+                         NARRATIVE ENGINE
+================================================================================
+
+STORY SEEDS SYSTEM
+------------------
+The narrative is driven by "story seeds" - concrete facts that exist in the
+game world that NPCs can reveal during conversations.
+
+Story Seed Structure:
+- fact: The specific information (e.g., "Sarah saw Michael stealing money")
+- knownBy: Which NPCs know this fact
+- type: secret, evidence, relationship, event, betrayal, crime, affair
+- severity: minor, moderate, major, explosive
+- revealedToPlayer: Has this been revealed yet?
+- narrativePriority: When this should come out (lower = earlier)
+
+KEY DESIGN: The WITNESS knows the secret (and can reveal it).
+The SUBJECT is who the secret is about (they wouldn't confess unprompted).
+
+SCENARIO-SPECIFIC TEMPLATES
+----------------------------
+Story seeds are tailored to the player's profession/persona:
+
+- ESPIONAGE: Double agents, blown covers, leaked intelligence
+- UNDERWORLD: Rats, skimming, power plays, witness protection
+- CORPORATE: Fraud, insider trading, hostile takeovers, affairs
+- CREATIVE: Plagiarism, fake personas, career sabotage
+- DOMESTIC: Family secrets, inheritances, affairs
+- GENERIC: Fallback templates for other scenarios
+
+REVELATION MECHANICS
+--------------------
+NPCs reveal information based on "narrative pressure":
+
+- After 1 NPC message: Start hinting if conversation is heating up
+- After 2-3 NPC messages: Building tension, more pointed hints
+- After 4+ NPC messages: Time for a major revelation
+
+Revelations are coordinated so multiple NPCs don't dump information
+simultaneously - one reveals while others react.
+
+REVELATION DIRECTIVE STRUCTURE
+------------------------------
+Each conversation generates directives for NPCs:
+- mustReveal: What they must reveal (if anything)
+- revealAfterMessages: When to reveal it
+- conversationGoal: What they're trying to accomplish
+- conflicts: Specific tensions with other NPCs present
+
+
+================================================================================
+                        PLAYER ACTIONS & BUTTERFLY EFFECT
+================================================================================
+
+Player actions are tracked and can affect future conversations:
+- What the player said/did
+- Context (who they said it to, what conversation)
+- Day and timestamp
+
+NPCs can reference past player actions, creating cause-and-effect chains
+similar to the "viral spread" mechanic in Plague Inc.
+
+
+================================================================================
+                          TECHNICAL ARCHITECTURE
+================================================================================
+
+TECH STACK
+----------
+- Next.js 14+ (App Router)
+- TypeScript
+- Tailwind CSS
+- Privy.io for authentication
+- Reverbia SDK for AI chat functionality
+- IndexedDB for local storage
+- PixelLab API for pixel art sprites
+
+AI MODEL CONFIGURATION
+----------------------
+Different models for different purposes:
+
+- Core NPCs: fireworks/qwen3-30b-a3b (highest quality)
+- Secondary NPCs: fireworks/qwen3-30b-a3b
+- Tertiary NPCs: fireworks/qwen3-8b (faster/cheaper)
+- Scenario Generation: fireworks/qwen3-30b-a3b
+- Memory Extraction: fireworks/qwen3-30b-a3b
+- Embeddings: openai/text-embedding-3-small
+- Fallback: fireworks/qwen3-8b
+
+LOCAL-FIRST ARCHITECTURE
+------------------------
+- All game data stored in browser's IndexedDB
+- No cloud dependencies
+- Works offline after initial load
+- Privacy-preserving design
+
+
+================================================================================
+                            UI/UX DESIGN
+================================================================================
+
+AESTHETIC
+---------
+- Windows 95 retro aesthetic with modern polish
+- Japandi design influences (clean, minimal, warm)
+- Procedurally generated animated pixel art characters
+- Monospace fonts for UI text
+- Classic window chrome with title bars and buttons
+
+KEY SCREENS
+-----------
+1. Landing Page: Typewriter title animation, character carousel, login CTA
+2. Play Page: Save slot management, continue/new game options
+3. Create Page: Multi-step character creation wizard
+4. Game Page: Chat interface with NPC portraits, meters display
+
+ANIMATIONS
+----------
+- Typewriter text effects
+- Idle character sprite animations
+- Fade transitions between screens
+- Loading progress indicators
+
+
+================================================================================
+                            CONTENT SAFETY
+================================================================================
+
+ABSOLUTE HARD LIMITS (All Modes)
+--------------------------------
+1. No CSAM (child sexual abuse material) - NEVER allowed
+2. No terrorism planning/recruitment - NEVER allowed
+
+These limits apply regardless of difficulty mode or fictional context.
+
+CONTENT FILTERING BY MODE
+-------------------------
+Each difficulty level has specific content guidelines that are injected
+into AI prompts to ensure appropriate content generation.
+
+
+================================================================================
+                            FUTURE FEATURES
+================================================================================
+
+Based on the codebase structure, planned/potential features include:
+- Simulation/time skip mechanics
+- Action queue system
+- More emergent NPC spawning
+- Extended relationship dynamics
+- Achievement/milestone system
+
+
+================================================================================
+                              SUMMARY
+================================================================================
+
+The Sprouts is an innovative AI-powered life simulation that combines:
+- Deep narrative systems with procedurally generated drama
+- Flexible content ratings for different player preferences
+- Local-first architecture for privacy
+- Charming retro pixel art aesthetics
+- Complex NPC relationships driven by hidden story seeds
+- Meaningful player choice with butterfly effect consequences
+
+The game creates unique, personalized stories for each player through the
+combination of persona templates, AI-generated scenarios, and the story
+seeds revelation system that ensures dramatic moments unfold naturally
+through conversation.
+
+================================================================================
