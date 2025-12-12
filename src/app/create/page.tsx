@@ -45,6 +45,8 @@ function cleanupAIText(text: string): string {
     .replace(/([a-zA-Z])(\d)/g, '$1 $2')
     // Fix missing space between number and word (e.g., "18years" -> "18 years")
     .replace(/(\d)([a-zA-Z])/g, '$1 $2')
+    // Fix money formatting: "$5 M" -> "$5M", "$10 K" -> "$10K", etc.
+    .replace(/\$(\d+(?:\.\d+)?)\s*([MKBmkb])\b/g, '$$$1$2')
     // Fix double spaces
     .replace(/\s{2,}/g, ' ')
     // Trim whitespace

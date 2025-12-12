@@ -1307,6 +1307,167 @@ export const PERSONA_POOLS: Record<ContentRating, PersonaTemplate[]> = {
         'Someone trying to deprogram them',
       ],
     },
+    // === EXPLICITLY SEXUAL PERSONAS (NSFW) ===
+    {
+      id: 'sex-worker',
+      type: 'High-End Escort',
+      traits: ['seductive', 'business-minded', 'experienced', 'secretive'],
+      situations: [
+        'A client is getting too attached and obsessive',
+        'Blackmail from someone who discovered the secret',
+        'Falling for a client against all rules',
+      ],
+      backstoryHints: [
+        'Chose this life for the money and freedom',
+        'Has seen the darkest secrets of the elite',
+        'Maintains a completely separate public identity',
+      ],
+      npcContextHints: [
+        'Wealthy clients with dangerous secrets',
+        'A jealous regular who wants exclusivity',
+        'Someone from their "normal" life getting suspicious',
+      ],
+    },
+    {
+      id: 'porn-star',
+      type: 'Adult Film Star',
+      traits: ['exhibitionist', 'confident', 'jaded', 'business-savvy'],
+      situations: [
+        'Mainstream fame conflicting with adult past',
+        'A stalker fan crossing dangerous lines',
+        'Industry politics and rivalries getting ugly',
+      ],
+      backstoryHints: [
+        'Started for money, stayed for the fame',
+        'Family either doesn\'t know or has disowned them',
+        'Has dirt on major industry figures',
+      ],
+      npcContextHints: [
+        'Directors and producers with agendas',
+        'Co-stars who are friends or rivals',
+        'Someone trying to use their past against them',
+      ],
+    },
+    {
+      id: 'sugar-baby',
+      type: 'Sugar Baby',
+      traits: ['ambitious', 'charming', 'calculating', 'adaptable'],
+      situations: [
+        'Multiple arrangements becoming complicated',
+        'One sugar parent getting possessive',
+        'Real feelings developing where they shouldn\'t',
+      ],
+      backstoryHints: [
+        'Uses sexuality as a tool for advancement',
+        'Maintains multiple relationships for security',
+        'Has expensive tastes and expensive secrets',
+      ],
+      npcContextHints: [
+        'Wealthy benefactors with expectations',
+        'Other sugar babies competing for the same marks',
+        'Someone from their real life discovering the truth',
+      ],
+    },
+    {
+      id: 'swinger',
+      type: 'Swinger Lifestyle',
+      traits: ['adventurous', 'open-minded', 'hedonistic', 'complicated'],
+      situations: [
+        'Jealousy emerging despite the open arrangement',
+        'A play partner catching feelings',
+        'The lifestyle being discovered by family or work',
+      ],
+      backstoryHints: [
+        'Explored sexuality after a repressive upbringing',
+        'Marriage transformed by opening up',
+        'The scene knows all the dirty secrets of important people',
+      ],
+      npcContextHints: [
+        'Primary partner with their own adventures',
+        'Regular play partners with drama',
+        'Vanilla friends who wouldn\'t understand',
+      ],
+    },
+    {
+      id: 'dominatrix',
+      type: 'Professional Dominatrix',
+      traits: ['commanding', 'psychologically astute', 'powerful', 'private'],
+      situations: [
+        'A powerful client\'s secrets becoming dangerous knowledge',
+        'Vanilla relationship struggling with the work',
+        'A client pushing boundaries in unsafe ways',
+      ],
+      backstoryHints: [
+        'Found power in a role most don\'t understand',
+        'Knows the secret desires of politicians and CEOs',
+        'Strict separation between work and personal life',
+      ],
+      npcContextHints: [
+        'Submissive clients with public power',
+        'Others in the BDSM community',
+        'Someone trying to expose or blackmail',
+      ],
+    },
+    {
+      id: 'cam-model',
+      type: 'Cam Model',
+      traits: ['entrepreneurial', 'performative', 'boundary-setting', 'online-savvy'],
+      situations: [
+        'A viewer has discovered their real identity',
+        'Income depends on increasingly extreme content',
+        'Real relationship struggling with the work',
+      ],
+      backstoryHints: [
+        'Built a following through personality and performance',
+        'The parasocial relationships have gotten intense',
+        'Makes more money than anyone in their vanilla life knows',
+      ],
+      npcContextHints: [
+        'Obsessive top-tier subscribers',
+        'Romantic partners who know or don\'t know',
+        'Other models - allies or competition',
+      ],
+    },
+    {
+      id: 'nymphomaniac',
+      type: 'Sex Addict',
+      traits: ['compulsive', 'charming', 'self-destructive', 'in denial'],
+      situations: [
+        'Addiction threatening job, relationships, or safety',
+        'Risky behavior escalating to dangerous levels',
+        'Someone finally forcing them to confront the problem',
+      ],
+      backstoryHints: [
+        'Uses sex to fill a void nothing else can',
+        'Has risked everything multiple times for a fix',
+        'Knows the behavior is destructive but can\'t stop',
+      ],
+      npcContextHints: [
+        'Enablers and fellow addicts',
+        'Partners who\'ve been hurt',
+        'Someone trying to help them get clean',
+      ],
+    },
+    {
+      id: 'homewrecker',
+      type: 'Serial Homewrecker',
+      traits: ['predatory', 'charming', 'thrill-seeking', 'empty'],
+      situations: [
+        'Current affair getting too serious',
+        'A scorned spouse seeking revenge',
+        'Falling for someone who\'s actually single',
+      ],
+      backstoryHints: [
+        'Gets off on the forbidden nature of affairs',
+        'Has destroyed multiple marriages without remorse',
+        'The thrill is in the conquest, not the relationship',
+      ],
+      npcContextHints: [
+        'Current married lovers',
+        'Spouses who\'ve discovered the affair',
+        'Someone who finally makes them feel something real',
+      ],
+    },
   ],
 };
 
