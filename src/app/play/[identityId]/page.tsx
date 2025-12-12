@@ -16,6 +16,8 @@ import {
 } from '@/lib/narrative';
 import { buildSafetyPreamble, getNPCBehaviorGuidelines } from '@/lib/content-filter';
 import { stripModelArtifacts as stripArtifacts } from '@/lib/llm-utils';
+import { TutorialOverlay } from '@/components/TutorialOverlay';
+import { hasTutorialCompleted, TutorialStep } from '@/lib/tutorial';
 
 // Persona to sprite mapping for migration (matches create page CHARACTER_SPRITES)
 const PERSONA_SPRITE_MAP: Record<string, string> = {
@@ -228,6 +230,12 @@ export default function GamePage() {
 
   // Ref to control whether streaming updates should show in UI (disabled during retries)
   const showStreamingRef = useRef<boolean>(true);
+
+  // Tutorial state
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [tutorialNpcClicked, setTutorialNpcClicked] = useState(false);
+  const [tutorialMessageSent, setTutorialMessageSent] = useState(false);
+  const [tutorialNpcResponded, setTutorialNpcResponded] = useState(false);
 
   // Get current conversation's auto-converse state
   const currentConversation = allConversations.find(c => c.id === conversationId);
@@ -531,6 +539,16 @@ export default function GamePage() {
     }
   }, [authenticated, identityId, router]);
 
+  // Check if tutorial should be shown (first-time users only)
+  useEffect(() => {
+    if (!loading && identity) {
+      const completed = hasTutorialCompleted();
+      if (!completed) {
+        setShowTutorial(true);
+      }
+    }
+  }, [loading, identity]);
+
   // Assign diverse models to NPCs when models list becomes available
   // ALWAYS reassign from our pool to ensure correct models are used
   useEffect(() => {
@@ -791,6 +809,11 @@ export default function GamePage() {
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
 
+    // Tutorial trigger: message sent
+    if (showTutorial) {
+      setTutorialMessageSent(true);
+    }
+
     // AUTO-CHAT RESUME: If auto-chat was paused waiting for player, resume it
     if (autoChatPausedForPlayer) {
       console.log('[Auto-Chat] Player responded, resuming auto-chat');
@@ -1031,6 +1054,11 @@ NO HIDDEN AGENDAS. NO SECRETS TO REVEAL. JUST VIBES.`;
 
       // Add message immediately (possibly with loading state for image)
       setMessages((prev) => [...prev, npcMessage]);
+
+      // Tutorial trigger: NPC responded
+      if (showTutorial) {
+        setTutorialNpcResponded(true);
+      }
 
       // AUTO-CHAT PAUSE: Pause if NPC directly addresses the player
       // This includes: 1) Explicit shouldAskPlayerQuestion flag, OR 2) Content-based detection
@@ -1381,6 +1409,7 @@ NO HIDDEN AGENDAS. NO SECRETS TO REVEAL. JUST VIBES.`;
               <button
                 onClick={() => setShowActionsModal(!showActionsModal)}
                 className="win95-btn w-full py-2"
+                data-tutorial="actions-btn"
                 style={{
                   background: 'var(--win95-accent)',
                   color: 'white',
@@ -1393,6 +1422,7 @@ NO HIDDEN AGENDAS. NO SECRETS TO REVEAL. JUST VIBES.`;
               <button
                 onClick={() => setShowSimulateModal(!showSimulateModal)}
                 className="win95-btn w-full py-2"
+                data-tutorial="simulate-btn"
                 style={{
                   background: 'var(--win95-accent)',
                   color: 'white',
@@ -1420,6 +1450,7 @@ NO HIDDEN AGENDAS. NO SECRETS TO REVEAL. JUST VIBES.`;
             <button
               onClick={() => setShowNewChatModal(true)}
               className="m-2 py-2 px-3 flex items-center justify-center gap-2"
+              data-tutorial="group-btn"
               style={{
                 background: 'var(--win95-title-active)',
                 color: 'white',
@@ -1433,7 +1464,7 @@ NO HIDDEN AGENDAS. NO SECRETS TO REVEAL. JUST VIBES.`;
             </button>
 
             {/* Conversation List */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto" data-tutorial="npc-list">
               {allConversations.length === 0 ? (
                 <div className="p-2 text-center">
                   <p className="win95-text" style={{ fontSize: '10px', color: 'var(--win95-text-dim)' }}>
@@ -1449,6 +1480,7 @@ NO HIDDEN AGENDAS. NO SECRETS TO REVEAL. JUST VIBES.`;
                     <div
                       key={conv.id}
                       className="relative"
+                      data-tutorial={conv.isIndividualNpc ? 'npc-item' : undefined}
                       style={{
                         borderBottom: '1px solid var(--win95-mid)',
                         background: conversationId === conv.id ? 'var(--win95-lightest)' : 'transparent',
@@ -1462,6 +1494,10 @@ NO HIDDEN AGENDAS. NO SECRETS TO REVEAL. JUST VIBES.`;
                           setSelectedNpc(null);
                           setConversationId(conv.id);
                           setShowConvMenu(null);
+                          // Tutorial trigger: NPC clicked (for individual NPC conversations)
+                          if (showTutorial && conv.isIndividualNpc) {
+                            setTutorialNpcClicked(true);
+                          }
                           // Load this conversation's messages
                           const loaded = await getFromIndexedDB('conversations', conv.id);
                           let loadedMessages: GroupMessage[] = loaded?.messages || [];
@@ -2331,7 +2367,7 @@ NO HIDDEN AGENDAS. NO SECRETS TO REVEAL. JUST VIBES.`;
                               <span className="win95-text" style={{ fontSize: '9px', color: 'var(--win95-text-dim)' }}>RELATIONSHIP:</span>
                               <p className="win95-text" style={{ fontSize: '10px', textTransform: 'capitalize' }}>{npc.relationshipStatus}</p>
                             </div>
-                            <div>
+                            <div data-tutorial="emotions">
                               <span className="win95-text" style={{ fontSize: '9px', color: 'var(--win95-text-dim)' }}>MOOD:</span>
                               <p className="win95-text" style={{ fontSize: '10px', textTransform: 'capitalize' }}>{getEmotionalStateDisplay(npc.currentEmotionalState)}</p>
                             </div>
@@ -2662,6 +2698,7 @@ NO HIDDEN AGENDAS. NO SECRETS TO REVEAL. JUST VIBES.`;
                 onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
                 placeholder={autoChatPausedForPlayer ? `You, ${identity?.name || 'Player'}: respond to the conversation...` : "Type a message..."}
                 className="win95-input flex-1"
+                data-tutorial="chat-input"
                 style={{
                   fontSize: '12px',
                   padding: '4px 8px',
@@ -2689,6 +2726,16 @@ NO HIDDEN AGENDAS. NO SECRETS TO REVEAL. JUST VIBES.`;
           </div>
         </div>
       </div>
+
+      {/* Tutorial Overlay for first-time users */}
+      {showTutorial && (
+        <TutorialOverlay
+          onComplete={() => setShowTutorial(false)}
+          npcClicked={tutorialNpcClicked}
+          messageSent={tutorialMessageSent}
+          npcResponded={tutorialNpcResponded}
+        />
+      )}
     </main>
   );
 }
