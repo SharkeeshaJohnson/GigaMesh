@@ -63,22 +63,16 @@ export type {
 } from './types';
 
 // =============================================================================
-// STORY SEEDS (Legacy revelation system)
+// STORY SEEDS (Simplified - integrated into auto-chat directive)
 // =============================================================================
 
 export type {
   StorySeed,
-  RevelationDirective,
-  RevelationOptions,
 } from './story-seeds';
 
 export {
   generateStorySeeds,
-  selectRevelationForNPC,
-  buildRevelationPrompt,
   markSeedRevealed,
-  detectAndMarkRevelation,
-  generateNPCDynamics,
 } from './story-seeds';
 
 // =============================================================================

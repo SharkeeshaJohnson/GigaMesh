@@ -11,8 +11,8 @@ import { getModelForNPC, filterAvailableModels } from '@/lib/models';
 import { parseImageTags, inferImageType, generateCharacterConsistentImage } from '@/lib/image-generation';
 import { cacheChatImage, getCachedChatImage, getBreathingAnimationFrames } from '@/lib/sprite-cache';
 import {
-  detectAndMarkRevelation,
   generateStorySeeds,
+  markSeedRevealed,
   StorySeed,
 } from '@/lib/narrative';
 
@@ -215,10 +215,6 @@ export default function GamePage() {
   // Gallery state
   const [showGallery, setShowGallery] = useState(false);
   const [selectedGalleryImage, setSelectedGalleryImage] = useState<{ url: string; npcName?: string; type?: string; timestamp: Date } | null>(null);
-
-  // Revelation tracking state - prevents duplicate revelations in same conversation
-  const [revealedSeedIds, setRevealedSeedIds] = useState<string[]>([]);
-  const [lastMajorRevealNpcId, setLastMajorRevealNpcId] = useState<string | null>(null);
 
   // Streaming state for real-time NPC responses
   const [streamingContent, setStreamingContent] = useState<string>('');
@@ -679,12 +675,6 @@ export default function GamePage() {
     autoConverseRef.current = autoConverse;
   }, [autoConverse]);
 
-  // Reset revelation tracking when conversation changes
-  useEffect(() => {
-    setRevealedSeedIds([]);
-    setLastMajorRevealNpcId(null);
-  }, [conversationId]);
-
   const handleAddAction = async () => {
     if (!newAction.trim() || !identity) return;
 
@@ -845,45 +835,74 @@ export default function GamePage() {
       const conversationNpcIds = currentConv?.npcIds || identity.npcs.map(n => n.id);
       const otherNpcIds = conversationNpcIds.filter(id => id !== npc.id);
 
-      // Pass revelation state for coordination
-      const revelationState = {
-        revealedSeedIds,
-        majorRevealedThisRound: lastMajorRevealNpcId !== null && lastMajorRevealNpcId !== npc.id,
-      };
-
       // Check if user is in roleplay/sexual mode
       const inRoleplayMode = isRoleplayMode(recentMessages);
 
-      // For auto-chat: Force story progression with dramatic revelations
-      // BUT NOT if user is in roleplay mode - let the roleplay flow
+      // Get this NPC's unrevealed story seeds (sorted by priority)
+      const npcSeeds = (identity.storySeeds || [])
+        .filter((s: StorySeed) => s.knownBy.includes(npc.id) && !s.revealedToPlayer)
+        .sort((a: StorySeed, b: StorySeed) => a.narrativePriority - b.narrativePriority);
+      const currentSeed = npcSeeds[0] as StorySeed | undefined;
+
+      // Build seed-driven auto-chat directive
+      // Each NPC gets their SPECIFIC secret embedded in their phase instruction
       let autoChatDirective = '';
-      if (isAutoChat && autoChatCount > 0 && !inRoleplayMode) {
-        // Determine story beat based on position in 10-message arc
+      const otherNames = otherNpcIds.map(id => identity.npcs.find(n => n.id === id)?.name).filter(Boolean).join(', ');
+
+      if (isAutoChat && !inRoleplayMode && currentSeed) {
+        // NPC has a secret to reveal - phase-specific directive
         if (autoChatCount <= 3) {
+          // TENSION PHASE: Hint but don't reveal
           autoChatDirective = `
-[AUTO-CHAT DIRECTIVE - MESSAGE ${autoChatCount}/10]
-Build tension. Hint at something you know that others don't. Be mysterious or accusatory.
-Drop subtle clues about secrets, past events, or hidden motivations.
-Other characters present: ${otherNpcIds.map(id => identity.npcs.find(n => n.id === id)?.name).filter(Boolean).join(', ')}`;
+[YOUR SECRET]
+You know: "${currentSeed.fact}"
+
+[PHASE: TENSION - Message ${autoChatCount}/10]
+DON'T reveal this yet. Instead:
+- Drop hints that make people nervous
+- Be mysterious about what you know
+- React with knowing looks and loaded silences
+- Make veiled references without specifics
+Other characters present: ${otherNames}`;
         } else if (autoChatCount <= 6) {
+          // ESCALATION PHASE: Get closer to revealing
           autoChatDirective = `
-[AUTO-CHAT DIRECTIVE - MESSAGE ${autoChatCount}/10]
-Escalate the drama. Confront someone directly or make a shocking accusation.
-Reveal something significant about yourself or another character.
-This is the rising action - things should get heated.`;
+[YOUR SECRET]
+You know: "${currentSeed.fact}"
+
+[PHASE: ESCALATION - Message ${autoChatCount}/10]
+Getting closer to revealing:
+- Make pointed accusations
+- Ask leading questions that corner them
+- Let them know you're watching
+- Show that you know more than you're saying`;
         } else if (autoChatCount <= 9) {
+          // REVELATION PHASE: Say it clearly
           autoChatDirective = `
-[AUTO-CHAT DIRECTIVE - MESSAGE ${autoChatCount}/10]
-MAJOR REVELATION TIME. Drop a bombshell that changes everything.
-Confess a secret, expose a lie, or reveal a hidden truth.
-Be dramatic - this is the climax of this conversation arc.`;
+[REVEAL THIS NOW]
+"${currentSeed.fact}"
+
+[PHASE: REVELATION - Message ${autoChatCount}/10]
+Say it clearly. Use names. Be specific.
+This is your moment to expose the truth.
+Don't be vague - state exactly what you know.`;
         } else {
+          // CONCLUSION PHASE
           autoChatDirective = `
-[AUTO-CHAT DIRECTIVE - MESSAGE ${autoChatCount}/10 - FINAL]
-Conclude this dramatic exchange. React to everything that's been revealed.
-Set up consequences and unresolved tensions for future conversations.
-End on a cliffhanger or dramatic note.`;
+[PHASE: CONCLUSION - Message ${autoChatCount}/10]
+The revelation has happened. Now:
+- React to the fallout
+- Set up consequences
+- End on a cliffhanger or dramatic note`;
         }
+      } else if (isAutoChat && !inRoleplayMode && !currentSeed) {
+        // NPC has no secrets - react to others
+        autoChatDirective = `
+[REACT MODE - Message ${autoChatCount}/10]
+You don't have secrets to reveal right now.
+React to what others are saying. Ask questions.
+Be emotionally present. Don't make things up.
+Other characters present: ${otherNames}`;
       } else if (isAutoChat && inRoleplayMode) {
         // In roleplay mode - let it flow naturally
         autoChatDirective = `
@@ -944,7 +963,7 @@ Don't interrupt with story drama. Focus on the moment.`;
         }));
       const combinedRecentMessages = [...recentMessages, ...recentFromRefForPrompt];
 
-      const systemPrompt = buildGroupChatPrompt(npc, identity, combinedRecentMessages, simulationHistory, revelationState, conversationNpcIds, promptOptions) + autoChatDirective;
+      const systemPrompt = buildGroupChatPrompt(npc, identity, combinedRecentMessages, simulationHistory, conversationNpcIds, promptOptions) + autoChatDirective;
 
       // Build messages for API - CRITICAL: Only mark messages as 'assistant' if from THIS NPC
       // Other NPCs' messages should be 'user' role to avoid confusing the model
@@ -1140,30 +1159,17 @@ Don't interrupt with story drama. Focus on the moment.`;
         }
       }
 
-      // NARRATIVE ENGINE: Track revelations after NPC response
-      // This detects if the NPC revealed a story seed and updates tracking
-      const storySeeds = identity.storySeeds || [];
-      if (storySeeds.length > 0 && assistantContent) {
-        const { revealed, updatedSeeds } = detectAndMarkRevelation(
-          assistantContent,
-          npc.id,
-          storySeeds
-        );
+      // NARRATIVE ENGINE: Mark seeds as revealed when in revelation phase
+      // Simple approach: if NPC was in phase 7-9 (revelation) and had a seed, mark it revealed
+      // No word-matching needed - if we told them to reveal, assume they did
+      if (isAutoChat && currentSeed && autoChatCount >= 7 && autoChatCount <= 9) {
+        console.log(`[Narrative] ${npc.name} revealed seed: "${currentSeed.fact}"`);
 
-        if (revealed) {
-          console.log(`[Narrative] ${npc.name} revealed: "${revealed.fact}"`);
-
-          // Track this revelation locally (for conversation coordination)
-          setRevealedSeedIds(prev => [...prev, revealed.id]);
-          if (revealed.severity === 'major' || revealed.severity === 'explosive') {
-            setLastMajorRevealNpcId(npc.id);
-          }
-
-          // Update identity's story seeds in state and persist to IndexedDB
-          const updatedIdentity = { ...identity, storySeeds: updatedSeeds };
-          setIdentity(updatedIdentity);
-          saveToIndexedDB('identities', updatedIdentity);
-        }
+        // Mark the seed as revealed
+        const updatedSeeds = markSeedRevealed(identity.storySeeds || [], currentSeed.id, 'player');
+        const updatedIdentity = { ...identity, storySeeds: updatedSeeds };
+        setIdentity(updatedIdentity);
+        saveToIndexedDB('identities', updatedIdentity);
       }
 
       // CROSS-CONVERSATION MEMORY: Extract facts from auto-chat and store in NPC memory
@@ -3648,7 +3654,6 @@ function buildGroupChatPrompt(
   identity: Identity,
   recentMessages: GroupMessage[],
   _simulationHistory: SimulationResult[],
-  _revelationState?: { revealedSeedIds: string[]; majorRevealedThisRound: boolean },
   conversationNpcIds?: string[],
   options?: {
     isAutoChat?: boolean;
