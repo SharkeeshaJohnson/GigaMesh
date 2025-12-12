@@ -186,11 +186,13 @@ function getFallbackScenario(npc: NPC): string {
 /**
  * Generate an opening scenario for an NPC on Day 1
  * Uses LLM to create a personalized opening based on NPC's full context
+ * @param model - Optional model to use (defaults to NPC's assignedModel or scenarioGeneration config)
  */
 export async function generateDay1Scenario(
   npc: NPC,
   identity: Identity,
-  sendMessage?: SendMessageFn
+  sendMessage?: SendMessageFn,
+  model?: string
 ): Promise<string> {
   // If no sendMessage provided, return fallback
   if (!sendMessage) {
@@ -198,10 +200,13 @@ export async function generateDay1Scenario(
     return getFallbackScenario(npc);
   }
 
+  // Use provided model, NPC's assigned model, or default config
+  const modelToUse = model || npc.assignedModel || MODEL_CONFIG.scenarioGeneration;
+
   try {
     const prompt = buildScenarioPrompt(npc, identity);
 
-    console.log(`[ScenarioGen] Generating Day 1 scenario for ${npc.name}...`);
+    console.log(`[ScenarioGen] Generating Day 1 scenario for ${npc.name} with model ${modelToUse}...`);
 
     const response = await sendMessage({
       messages: [
@@ -211,7 +216,7 @@ export async function generateDay1Scenario(
         },
         { role: 'user', content: prompt },
       ],
-      model: MODEL_CONFIG.scenarioGeneration,
+      model: modelToUse,
     });
 
     const scenario = extractScenarioFromResponse(response);
@@ -232,12 +237,14 @@ export async function generateDay1Scenario(
 /**
  * Generate a scenario based on a simulation event
  * Used when simulation completes to update NPC opening scenarios
+ * @param model - Optional model to use (defaults to NPC's assignedModel or scenarioGeneration config)
  */
 export async function generateEventBasedScenario(
   npc: NPC,
   event: SimulationEvent,
   identity: Identity,
-  sendMessage?: SendMessageFn
+  sendMessage?: SendMessageFn,
+  model?: string
 ): Promise<string> {
   // Build event context
   const eventContext = `
@@ -256,10 +263,13 @@ This NPC ${event.involvedNpcs?.some(n =>
     return getEventFallbackScenario(npc, event);
   }
 
+  // Use provided model, NPC's assigned model, or default config
+  const modelToUse = model || npc.assignedModel || MODEL_CONFIG.scenarioGeneration;
+
   try {
     const prompt = buildScenarioPrompt(npc, identity, eventContext);
 
-    console.log(`[ScenarioGen] Generating event-based scenario for ${npc.name}...`);
+    console.log(`[ScenarioGen] Generating event-based scenario for ${npc.name} with model ${modelToUse}...`);
 
     const response = await sendMessage({
       messages: [
@@ -269,7 +279,7 @@ This NPC ${event.involvedNpcs?.some(n =>
         },
         { role: 'user', content: prompt },
       ],
-      model: MODEL_CONFIG.scenarioGeneration,
+      model: modelToUse,
     });
 
     const scenario = extractScenarioFromResponse(response);
@@ -329,17 +339,22 @@ function getEventFallbackScenario(npc: NPC, event: SimulationEvent): string {
 
 /**
  * Generate a random new scenario for an NPC (when no simulation event involves them)
+ * @param model - Optional model to use (defaults to NPC's assignedModel or scenarioGeneration config)
  */
 export async function generateRandomScenario(
   npc: NPC,
   identity: Identity,
-  sendMessage?: SendMessageFn
+  sendMessage?: SendMessageFn,
+  model?: string
 ): Promise<string> {
   // If no sendMessage, use simple fallback
   if (!sendMessage) {
     console.log(`[ScenarioGen] No sendMessage for random scenario ${npc.name}, using fallback`);
     return getRandomFallbackScenario(npc);
   }
+
+  // Use provided model, NPC's assigned model, or default config
+  const modelToUse = model || npc.assignedModel || MODEL_CONFIG.scenarioGeneration;
 
   try {
     // Add context about it being a "new day" scenario
@@ -350,7 +365,7 @@ like a natural continuation of their life, not necessarily related to any specif
 
     const prompt = buildScenarioPrompt(npc, identity, dayContext);
 
-    console.log(`[ScenarioGen] Generating random scenario for ${npc.name}...`);
+    console.log(`[ScenarioGen] Generating random scenario for ${npc.name} with model ${modelToUse}...`);
 
     const response = await sendMessage({
       messages: [
@@ -360,7 +375,7 @@ like a natural continuation of their life, not necessarily related to any specif
         },
         { role: 'user', content: prompt },
       ],
-      model: MODEL_CONFIG.scenarioGeneration,
+      model: modelToUse,
     });
 
     const scenario = extractScenarioFromResponse(response);

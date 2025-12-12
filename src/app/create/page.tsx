@@ -6,7 +6,7 @@ import { useEffect, useState, Suspense, useRef } from 'react';
 import { Gender, Difficulty, Identity, INITIAL_NPC_COUNT, getEmotionalStateDisplay } from '@/lib/types';
 import { saveToIndexedDB } from '@/lib/indexeddb';
 import { useChat } from '@/lib/reverbia';
-import { MODEL_CONFIG } from '@/lib/models';
+import { MODEL_CONFIG, NPC_MODEL_POOL } from '@/lib/models';
 import {
   DIFFICULTY_TO_RATING,
   DIFFICULTY_INFO,
@@ -351,6 +351,8 @@ function CreatePageContent() {
           isActive: true,
           pixelArtUrl: npcSpriteUrls[index] || '',
           emotionSprites: {},
+          // Assign diverse models to each NPC for varied scenario generation
+          assignedModel: NPC_MODEL_POOL[index % NPC_MODEL_POOL.length],
           // Opening scenario generated below
           openingScenario: '',
           scenarioUsed: false,

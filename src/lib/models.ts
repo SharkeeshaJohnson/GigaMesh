@@ -42,13 +42,11 @@ export type ModelConfigKey = keyof typeof MODEL_CONFIG;
  */
 export const NPC_MODEL_POOL = [
   // Diverse models for varied NPC personalities - using full provider/model format
-  // Focused on unfiltered/less restricted models for crazy mode
-  'grok/grok-2-1212',                           // NPC 0: Grok 2 - edgy, unfiltered (most reliable)
-  'grok/grok-2-1212',                           // NPC 1: Grok 2 - using as default for reliability
-  'grok/grok-2-1212',                           // NPC 2: Grok 2
-  'grok/grok-2-1212',                           // NPC 3: Grok 2
-  'grok/grok-2-1212',                           // NPC 4: Grok 2
-  // All using Grok 2 for now until other models are verified working
+  // Each NPC gets a different model for unique "voice" in scenarios
+  'grok/grok-2-1212',                           // NPC 0: Grok 2 - edgy, unfiltered
+  'deepseek/deepseek-chat',                     // NPC 1: DeepSeek - reasoning focused
+  'fireworks/qwen2p5-72b-instruct',             // NPC 2: Qwen 72B - creative, expressive
+  // Note: Only 3 NPCs now, so we only need 3 diverse models
 ];
 
 /**

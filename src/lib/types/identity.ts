@@ -127,4 +127,4 @@ export interface SimulationHistoryEntry {
 
 // Constants
 export const MAX_SAVE_SLOTS = 4;
-export const INITIAL_NPC_COUNT = 5;
+export const INITIAL_NPC_COUNT = 3;
