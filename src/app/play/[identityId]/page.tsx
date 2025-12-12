@@ -225,6 +225,10 @@ export default function GamePage() {
   const [streamingNpc, setStreamingNpc] = useState<{ id: string; name: string } | null>(null);
   const streamingContentRef = useRef<string>('');
 
+  // Synchronous ref to track recent responses (avoids React state timing issues with similarity check)
+  // This is updated immediately when a response is generated, before React state updates
+  const recentResponsesRef = useRef<{ npcName: string; content: string; timestamp: number }[]>([]);
+
   // Get current conversation's auto-converse state
   const currentConversation = allConversations.find(c => c.id === conversationId);
   const autoConverse = currentConversation?.autoConverse || false;
@@ -926,7 +930,21 @@ Don't interrupt with story drama. Focus on the moment.`;
         memories: relevantMemories,
         inRoleplayMode, // Pass roleplay detection to prompt builder
       };
-      const systemPrompt = buildGroupChatPrompt(npc, identity, recentMessages, simulationHistory, revelationState, conversationNpcIds, promptOptions) + autoChatDirective;
+
+      // Include recent responses from synchronous ref in messages for banned phrase extraction
+      // This ensures the prompt builder knows about responses not yet in React state
+      const refNow = Date.now();
+      const recentFromRefForPrompt = recentResponsesRef.current
+        .filter(r => refNow - r.timestamp < 60000)
+        .map(r => ({
+          role: 'assistant' as const,
+          content: r.content,
+          timestamp: new Date(r.timestamp),
+          npcName: r.npcName,
+        }));
+      const combinedRecentMessages = [...recentMessages, ...recentFromRefForPrompt];
+
+      const systemPrompt = buildGroupChatPrompt(npc, identity, combinedRecentMessages, simulationHistory, revelationState, conversationNpcIds, promptOptions) + autoChatDirective;
 
       // Build messages for API - CRITICAL: Only mark messages as 'assistant' if from THIS NPC
       // Other NPCs' messages should be 'user' role to avoid confusing the model
@@ -992,11 +1010,31 @@ Don't interrupt with story drama. Focus on the moment.`;
           continue;
         }
 
-        // Check for similarity to recent messages
+        // Check for similarity to recent messages (from React state)
         const similarityCheck = checkResponseSimilarity(assistantContent, recentMessages);
         if (similarityCheck.isSimilar) {
           console.log(`[NPC Response] Attempt ${attempt + 1} too similar to ${similarityCheck.similarTo}, retrying...`);
           lastSimilarTo = similarityCheck.similarTo || 'someone';
+          await new Promise(resolve => setTimeout(resolve, 300));
+          continue;
+        }
+
+        // ALSO check against synchronous ref (catches responses not yet in React state)
+        // This fixes the race condition where multiple NPCs generate before state updates
+        const now = Date.now();
+        const recentFromRef = recentResponsesRef.current.filter(r => now - r.timestamp < 60000); // Last 60s
+        recentResponsesRef.current = recentFromRef; // Clean up old entries
+
+        const refMessages: GroupMessage[] = recentFromRef.map(r => ({
+          role: 'assistant' as const,
+          content: r.content,
+          timestamp: new Date(r.timestamp),
+          npcName: r.npcName,
+        }));
+        const refSimilarityCheck = checkResponseSimilarity(assistantContent, refMessages);
+        if (refSimilarityCheck.isSimilar) {
+          console.log(`[NPC Response] Attempt ${attempt + 1} too similar to recent response from ${refSimilarityCheck.similarTo}, retrying...`);
+          lastSimilarTo = refSimilarityCheck.similarTo || 'someone';
           await new Promise(resolve => setTimeout(resolve, 300));
           continue;
         }
@@ -1065,6 +1103,14 @@ Don't interrupt with story drama. Focus on the moment.`;
       setStreamingContent('');
       setStreamingNpc(null);
       streamingContentRef.current = '';
+
+      // IMPORTANT: Add to synchronous ref BEFORE React state update
+      // This ensures the next NPC can see this response immediately for similarity check
+      recentResponsesRef.current.push({
+        npcName: npc.name,
+        content: cleanedText || assistantContent,
+        timestamp: Date.now(),
+      });
 
       // Add message immediately (possibly with loading state for image)
       setMessages((prev) => [...prev, npcMessage]);
